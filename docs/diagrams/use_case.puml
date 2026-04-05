@@ -1,0 +1,212 @@
+@startuml Fitness Center - Use Case Diagram
+!theme plain
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam usecaseBorderColor #336699
+skinparam usecaseBackgroundColor #EEF4FF
+skinparam actorBorderColor #336699
+skinparam packageBorderColor #AAAAAA
+skinparam packageBackgroundColor #FAFAFA
+skinparam ArrowColor #555555
+skinparam shadowing false
+
+left to right direction
+
+' ──────────────── Actors ────────────────
+actor Administrator as Admin
+actor Member       as Mem
+actor Trainer      as Train
+actor "Payment Gateway"   as PGW   #LightYellow
+actor "Email Provider"    as Email #LightYellow
+actor "SMS Gateway"       as SMS   #LightYellow
+
+' ══════════════════════════════════════════════════════════════
+' AUTHENTICATION & SECURITY
+' ══════════════════════════════════════════════════════════════
+package "Authentication & Security" {
+    usecase "Login"                      as UC_Login
+    usecase "Reset Password via Email"   as UC_ResetPwd
+    usecase "Refresh JWT Token"          as UC_JWTRefresh
+    usecase "Role-Based Access Control"  as UC_RBAC
+    usecase "Account Lockout"            as UC_Lockout
+    usecase "Automatic Session Expiry"   as UC_SessionExp
+}
+
+' ══════════════════════════════════════════════════════════════
+' MEMBER MANAGEMENT
+' ══════════════════════════════════════════════════════════════
+package "Member Management" {
+    usecase "Create Member Profile"      as UC_CreateMem
+    usecase "Edit Member Profile"        as UC_EditMem
+    usecase "View Member Profile"        as UC_ViewMem
+    usecase "Deactivate Member Account"  as UC_DeactivMem
+    usecase "Search Members"             as UC_SearchMem
+    usecase "Filter Members by Status"   as UC_FilterMem
+    usecase "Export Member List to CSV"  as UC_ExportMem
+    usecase "View Restricted Members"    as UC_Restricted
+}
+
+' ══════════════════════════════════════════════════════════════
+' SUBSCRIPTION MANAGEMENT
+' ══════════════════════════════════════════════════════════════
+package "Subscription Management" {
+    usecase "Create Subscription"             as UC_CreateSub
+    usecase "View Subscription Details"       as UC_ViewSub
+    usecase "Renew Subscription"              as UC_RenewSub
+    usecase "Cancel Subscription"             as UC_CancelSub
+    usecase "Personalized Subscription Price" as UC_PersSub
+    usecase "Automatic Subscription Expiry"   as UC_AutoExpiry
+    usecase "Configure Subscription Types"    as UC_SubTypes
+}
+
+' ══════════════════════════════════════════════════════════════
+' PAYMENT PROCESSING
+' ══════════════════════════════════════════════════════════════
+package "Payment Processing" {
+    usecase "Pay Online via Gateway"     as UC_Pay
+    usecase "View Payment History"       as UC_PayHist
+    usecase "Download Payment Receipt"   as UC_Receipt
+    usecase "Generate Monthly Revenue Report" as UC_RevReport
+    usecase "Track Refund Request"       as UC_Refund
+}
+
+' ══════════════════════════════════════════════════════════════
+' TRAINING CLASS MANAGEMENT
+' ══════════════════════════════════════════════════════════════
+package "Training Class Management" {
+    usecase "Create Training Class"      as UC_CreateClass
+    usecase "Edit Training Class"        as UC_EditClass
+    usecase "Cancel Training Class"      as UC_CancelClass
+    usecase "View Class Schedule"        as UC_ViewSched
+    usecase "Enforce Class Capacity"     as UC_Capacity
+    usecase "Assign Trainer to Class"    as UC_AssignTrain
+}
+
+' ══════════════════════════════════════════════════════════════
+' RESERVATION SYSTEM
+' ══════════════════════════════════════════════════════════════
+package "Reservation System" {
+    usecase "Make Class Reservation"          as UC_Reserve
+    usecase "Cancel Reservation"              as UC_CancelRes
+    usecase "View Own Reservations"           as UC_ViewMyRes
+    usecase "View All Reservations for Class" as UC_ViewAllRes
+    usecase "Manage Waitlist"                 as UC_Waitlist
+    usecase "Receive Confirmation Notification" as UC_ConfNotif
+    usecase "Receive Reminder Notification"   as UC_RemNotif
+}
+
+' ══════════════════════════════════════════════════════════════
+' TRAINER MANAGEMENT
+' ══════════════════════════════════════════════════════════════
+package "Trainer Management" {
+    usecase "Create Trainer Profile"     as UC_CreateTrain
+    usecase "Edit Trainer Profile"       as UC_EditTrain
+    usecase "Deactivate Trainer Account" as UC_DeactivTrain
+    usecase "View Trainer Schedule"      as UC_ViewTrainSched
+    usecase "Manage Trainer Availability" as UC_Availability
+}
+
+' ══════════════════════════════════════════════════════════════
+' FACILITY MANAGEMENT
+' ══════════════════════════════════════════════════════════════
+package "Facility Management" {
+    usecase "Create Facility"            as UC_CreateFac
+    usecase "Edit Facility Details"      as UC_EditFac
+    usecase "Facility Occupancy Report"  as UC_OccReport
+    usecase "Facility Availability Calendar" as UC_FacCal
+}
+
+' ══════════════════════════════════════════════════════════════
+' REPORTING & NOTIFICATIONS
+' ══════════════════════════════════════════════════════════════
+package "Reporting & Notifications" {
+    usecase "Member Activity Report"         as UC_ActReport
+    usecase "Subscription Expiry Notifications" as UC_ExpNotif
+}
+
+' ──────────────── Administrator associations ────────────────
+Admin --> UC_Login
+Admin --> UC_CreateMem
+Admin --> UC_EditMem
+Admin --> UC_ViewMem
+Admin --> UC_DeactivMem
+Admin --> UC_SearchMem
+Admin --> UC_FilterMem
+Admin --> UC_ExportMem
+Admin --> UC_Restricted
+Admin --> UC_CreateSub
+Admin --> UC_ViewSub
+Admin --> UC_RenewSub
+Admin --> UC_CancelSub
+Admin --> UC_PersSub
+Admin --> UC_SubTypes
+Admin --> UC_PayHist
+Admin --> UC_RevReport
+Admin --> UC_Refund
+Admin --> UC_CreateClass
+Admin --> UC_EditClass
+Admin --> UC_CancelClass
+Admin --> UC_ViewSched
+Admin --> UC_AssignTrain
+Admin --> UC_ViewAllRes
+Admin --> UC_CancelRes
+Admin --> UC_CreateTrain
+Admin --> UC_EditTrain
+Admin --> UC_DeactivTrain
+Admin --> UC_ViewTrainSched
+Admin --> UC_CreateFac
+Admin --> UC_EditFac
+Admin --> UC_OccReport
+Admin --> UC_FacCal
+Admin --> UC_ActReport
+Admin --> UC_Lockout
+
+' ──────────────── Member associations ────────────────
+Mem --> UC_Login
+Mem --> UC_ResetPwd
+Mem --> UC_JWTRefresh
+Mem --> UC_SessionExp
+Mem --> UC_EditMem
+Mem --> UC_ViewMem
+Mem --> UC_ViewSub
+Mem --> UC_Pay
+Mem --> UC_PayHist
+Mem --> UC_Receipt
+Mem --> UC_ViewSched
+Mem --> UC_Reserve
+Mem --> UC_CancelRes
+Mem --> UC_ViewMyRes
+Mem --> UC_Waitlist
+Mem --> UC_ConfNotif
+Mem --> UC_RemNotif
+
+' ──────────────── Trainer associations ────────────────
+Train --> UC_Login
+Train --> UC_ResetPwd
+Train --> UC_EditTrain
+Train --> UC_ViewTrainSched
+Train --> UC_Availability
+Train --> UC_ViewSched
+Train --> UC_ViewAllRes
+
+' ──────────────── External system associations ────────────────
+UC_Pay        --> PGW
+UC_Receipt    --> Email
+UC_ConfNotif  --> Email
+UC_RemNotif   --> Email
+UC_RemNotif   --> SMS
+UC_ExpNotif   --> Email
+UC_AutoExpiry --> Email
+UC_Lockout    --> Email
+UC_ResetPwd   --> Email
+UC_CreateMem  --> Email
+UC_CreateTrain --> Email
+
+' ──────────────── Include / Extend ────────────────
+UC_Reserve    ..> UC_Capacity   : <<include>>
+UC_CreateClass ..> UC_RBAC      : <<include>>
+UC_PersSub    ..> UC_CreateSub  : <<extend>>
+UC_Waitlist   ..> UC_Reserve    : <<extend>>
+UC_AutoExpiry ..> UC_ExpNotif   : <<include>>
+
+@enduml

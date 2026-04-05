@@ -1,0 +1,486 @@
+Issue Type;Epic Link;Summary;Description;Priority;Story Points;Estimate (days);Labels
+Epic;;INFRA: Infrastructure & Project Setup;;;;infrastructure
+Epic;;AUTH: Authentication & Security;;;;authentication,security
+Epic;;MEM: Member Management;;;;members
+Epic;;SUB: Subscription Management;;;;subscriptions
+Epic;;PAY: Payment Processing;;;;payments
+Epic;;CLASS: Training Class Management;;;;classes
+Epic;;RES: Reservation System;;;;reservations
+Epic;;TRAIN: Trainer Management;;;;trainers
+Epic;;FAC: Facility Management;;;;facilities
+Epic;;REPORT: Reporting & Notifications;;;;reporting,notifications
+
+Story;INFRA: Infrastructure & Project Setup;[INFRA-01] Project scaffolding and Docker Compose setup;"As a developer, I want a fully containerised local dev environment so that the full stack can be started with a single command.
+
+Acceptance Criteria:
+1. Docker Compose file starts backend (FastAPI/Uvicorn), frontend (React), and PostgreSQL 15+ services.
+2. Backend is reachable at http://localhost:8000/api/v1.
+3. Frontend is served at http://localhost:3000.
+4. Database initialises with an empty schema on first run.
+5. All environment-specific values (DB credentials, JWT secret, gateway keys) are loaded from a .env file — no secrets in source code.";High;8;8;infrastructure,devops
+
+Story;INFRA: Infrastructure & Project Setup;[INFRA-02] Database migrations baseline with Alembic;"As a developer, I want versioned database migrations so that schema changes are tracked and reproducible.
+
+Acceptance Criteria:
+1. Alembic is configured with asyncpg async driver.
+2. An initial migration creates all core tables (users, members, trainers, subscription_types, subscriptions, payments, facilities, classes, reservations, trainer_availability, password_reset_tokens).
+3. Running alembic upgrade head on a clean DB applies all migrations without errors.
+4. Direct DDL changes are prohibited; all schema changes must go through migration scripts.";High;3;3;infrastructure,database
+
+Story;INFRA: Infrastructure & Project Setup;[INFRA-03] CI/CD pipeline setup;"As a developer, I want an automated pipeline so that tests run on every push and the build is validated.
+
+Acceptance Criteria:
+1. Pipeline runs on every push/PR to main.
+2. Pipeline stages: lint (ruff/flake8 + ESLint), unit tests, integration tests, Docker build.
+3. Pipeline fails and blocks merge if any stage fails.
+4. Test coverage report is generated and published as a pipeline artifact.";Medium;5;5;infrastructure,devops,ci-cd
+
+Story;INFRA: Infrastructure & Project Setup;[INFRA-04] Structured JSON logging;"As an operator, I want structured JSON logs so that log aggregation tools can parse and query them.
+
+Acceptance Criteria:
+1. Every log entry is valid JSON containing: timestamp, log_level, service_name, request_id, message.
+2. No PII (email, phone) appears in logs in plaintext.
+3. Log level is configurable via environment variable.";Medium;2;2;infrastructure,observability
+
+Story;INFRA: Infrastructure & Project Setup;[INFRA-05] OpenAPI / Swagger documentation;"As a developer, I want auto-generated API docs so that frontend and QA can explore endpoints without reading source code.
+
+Acceptance Criteria:
+1. FastAPI auto-generates OpenAPI 3.x docs available at /api/v1/docs.
+2. Every endpoint documents request body, path/query params, and response schemas.
+3. Auth-protected endpoints are marked with the Bearer security scheme.";Low;2;2;infrastructure,documentation
+
+Story;AUTH: Authentication & Security;[AUTH-01] User login with JWT;"As a user, I want to log in with email and password so that I can access my role-appropriate dashboard.
+
+Acceptance Criteria:
+1. (REQ-1) Login form accepts email and password.
+2. (REQ-2) System validates credentials against stored bcrypt hash.
+3. (REQ-3) On success, returns access token (15-min TTL) and refresh token (7-day TTL) in response body.
+4. (REQ-4) User is redirected to their role-appropriate dashboard (Admin / Member / Trainer).
+5. Invalid credentials return a generic error that does not reveal which field is wrong.";High;5;5;authentication
+
+Story;AUTH: Authentication & Security;[AUTH-02] Password reset via email;"As a user, I want to reset my password via email so that I can regain access if I forget it.
+
+Acceptance Criteria:
+1. (REQ-5) Reset email is sent within 30 seconds of the request.
+2. (REQ-6) Reset token expires 60 minutes after issuance.
+3. (REQ-7) Each token is single-use; a second click returns an error.
+4. (REQ-8) New password requires at least 8 characters, one uppercase letter, and one digit.
+5. The email input form returns a generic success message regardless of whether the email exists (no user enumeration).";High;5;5;authentication,email
+
+Story;AUTH: Authentication & Security;[AUTH-03] JWT access token refresh;"As a frontend client, I want to silently refresh my access token so that the user session continues uninterrupted after token expiry.
+
+Acceptance Criteria:
+1. (REQ-9) POST /api/v1/auth/refresh accepts a valid refresh token and returns a new access token.
+2. (REQ-10) Revoked refresh tokens (e.g., after password change) are rejected with 401.
+3. (REQ-11) Refresh tokens are rotated on each use and stored securely.
+4. Frontend automatically redirects to login on 401 from the refresh endpoint.";High;3;3;authentication
+
+Story;AUTH: Authentication & Security;[AUTH-04] Role-based access control (RBAC);"As a system, I want every API endpoint to enforce role-based permissions so that users cannot access resources outside their role.
+
+Acceptance Criteria:
+1. (REQ-12) Access control is enforced server-side on every protected endpoint; client-side hiding is supplementary only.
+2. (REQ-13) Administrators have access to all resources.
+3. (REQ-14) Members can only access their own profile, subscription, payment history, and reservations.
+4. (REQ-15) Trainers can only access their own profile, schedule, and reservation lists of their own classes.
+5. Requests with insufficient role return HTTP 403 Forbidden.";High;5;5;authentication,security
+
+Story;AUTH: Authentication & Security;[AUTH-05] Account lockout after failed logins;"As a security control, I want accounts to be temporarily locked after repeated failed login attempts so that brute-force attacks are mitigated.
+
+Acceptance Criteria:
+1. (REQ-16) Account is locked after 5 consecutive failed login attempts.
+2. (REQ-17) Lockout duration is 15 minutes; account unlocks automatically.
+3. (REQ-18) A notification email is sent to the account owner when lockout is triggered.
+4. (REQ-19) Administrators can manually unlock any account from the admin panel.
+5. A locked user sees a clear lockout message with remaining time.";High;3;3;authentication,security
+
+Story;AUTH: Authentication & Security;[AUTH-06] Automatic session expiry after inactivity;"As a security control, I want inactive frontend sessions to expire automatically so that unattended sessions cannot be exploited.
+
+Acceptance Criteria:
+1. (REQ-20) Inactivity timeout is 30 minutes, configurable by an Administrator.
+2. (REQ-21) A warning dialog is shown 60 seconds before session expiry.
+3. (REQ-22) On expiry, all locally stored tokens are cleared and user is redirected to login.
+4. Any user interaction resets the inactivity timer.";Medium;2;2;authentication,security
+
+Story;MEM: Member Management;[MEM-01] Create member profile;"As an administrator, I want to register new members so that they can access the system.
+
+Acceptance Criteria:
+1. (REQ-23) Creation form captures: first name, last name, email, phone, date of birth.
+2. (REQ-24) Email uniqueness is validated before record creation.
+3. (REQ-25) A welcome email with a password-set link is sent to the new member.
+4. (REQ-26) Newly created member defaults to 'inactive' subscription status.
+5. Duplicate email submission shows a validation error without creating the record.";High;3;3;members
+
+Story;MEM: Member Management;[MEM-02] Edit member profile;"As a user, I want to edit a member profile so that personal details remain accurate.
+
+Acceptance Criteria:
+1. (REQ-27) Members may edit: first name, last name, phone number, and password.
+2. (REQ-28) Administrators may edit all fields including subscription status and role.
+3. (REQ-29) Invalid data returns field-level error messages before persistence.
+4. A member cannot edit another member's profile (returns 403).";High;2;2;members
+
+Story;MEM: Member Management;[MEM-03] View member profile;"As a user, I want to view a member profile so that I can see relevant details.
+
+Acceptance Criteria:
+1. (REQ-30) Profile view shows: personal details, subscription status, active subscription summary, and registration date.
+2. (REQ-31) Administrators additionally see: payment history link, reservation history link, and account status (active/restricted/locked).
+3. A member attempting to view another member's profile receives 403 Forbidden.";High;2;2;members
+
+Story;MEM: Member Management;[MEM-04] Deactivate and reactivate member account;"As an administrator, I want to deactivate member accounts so that former members can no longer access the system.
+
+Acceptance Criteria:
+1. (REQ-32) Deactivation sets the user's is_active flag to false.
+2. (REQ-33) Future reservations of a deactivated member are automatically cancelled with a notification email.
+3. (REQ-34) Administrators can reactivate a previously deactivated account.
+4. A deactivated member attempting to log in sees an 'account inactive' message.
+5. A confirmation modal is shown before deactivation listing the impact.";High;3;3;members
+
+Story;MEM: Member Management;[MEM-05] Search members;"As an administrator, I want to search the member database so that I can quickly locate a specific member.
+
+Acceptance Criteria:
+1. (REQ-35) Search queries across: first name, last name, email address, and phone number.
+2. (REQ-36) Search is case-insensitive and supports partial matches.
+3. (REQ-37) Results are displayed in a paginated list with 20 items per page by default.
+4. Search is debounced (live search as user types).
+5. 'No members found' message is shown for empty results.";Medium;3;3;members
+
+Story;MEM: Member Management;[MEM-06] Filter members by status;"As an administrator, I want to filter the member list by status so that I can manage specific cohorts efficiently.
+
+Acceptance Criteria:
+1. (REQ-38) Filter supports statuses: Active, Expired, Restricted, Inactive.
+2. (REQ-39) Multiple filters can be active simultaneously.
+3. (REQ-40) Active filter state is reflected in URL query parameters (bookmarkable).
+4. Clearing filters restores the unfiltered list.";Medium;2;2;members
+
+Story;MEM: Member Management;[MEM-07] Export member list to CSV;"As an administrator, I want to export the member list to CSV so that I can use it in external tools.
+
+Acceptance Criteria:
+1. (REQ-41) Exported CSV includes: first name, last name, email, phone, subscription status, registration date.
+2. (REQ-42) Export reflects any active search or filter criteria.
+3. (REQ-43) Filename includes the export date (e.g., members_2025-03-15.csv).
+4. Export triggered on a filtered list includes only filtered members.";Low;2;2;members,export
+
+Story;MEM: Member Management;[MEM-08] Restricted members list;"As an administrator, I want a dedicated view of restricted members so that I can act on expired subscriptions efficiently.
+
+Acceptance Criteria:
+1. (REQ-44) A member is restricted when their subscription end_date is past and status has not been renewed.
+2. (REQ-45) Restricted members appear in a dedicated list, separate from the active member list.
+3. (REQ-46) List shows: member name, email, subscription end date, days since expiry.
+4. Selecting a restricted member offers options to renew subscription or deactivate account.";Medium;2;2;members,subscriptions
+
+Story;SUB: Subscription Management;[SUB-01] Create subscription for a member;"As an administrator, I want to create a new subscription for a member so that they gain active access to the fitness center.
+
+Acceptance Criteria:
+1. (REQ-47) Subscription is linked to exactly one member and one subscription type.
+2. (REQ-48) End date is automatically calculated from the type's duration in days.
+3. (REQ-49) A member may not have two overlapping active subscriptions.
+4. (REQ-50) Creating a subscription updates the member's subscription_status to 'active'.
+5. A pricing preview (dates and total amount) is shown before confirmation.";High;5;5;subscriptions
+
+Story;SUB: Subscription Management;[SUB-02] View subscription details;"As a user, I want to view the full details of a subscription so that I understand my current plan and pricing.
+
+Acceptance Criteria:
+1. (REQ-51) Detail view shows: subscription type, start date, end date, base fee, PT sessions (if personalized), total amount, and current status.
+2. (REQ-52) For personalized subscriptions, the pricing formula is displayed: Base Fee + (PT Sessions x 50 RON).
+3. A member accessing another member's subscription URL receives 403 Forbidden.";High;2;2;subscriptions
+
+Story;SUB: Subscription Management;[SUB-03] Renew subscription;"As an administrator, I want to renew a member's subscription so that they regain active status without a gap.
+
+Acceptance Criteria:
+1. (REQ-53) Renewal creates a new subscription record without modifying the existing record.
+2. (REQ-54) New subscription start date defaults to the day after the current subscription's end date.
+3. (REQ-55) Member status is updated to 'active' upon renewal even if it was 'restricted'.
+4. Renewal form is pre-populated with the same subscription type.";High;3;3;subscriptions
+
+Story;SUB: Subscription Management;[SUB-04] Cancel subscription;"As an administrator, I want to cancel an active subscription so that a member's access is revoked.
+
+Acceptance Criteria:
+1. (REQ-56) Cancellation sets subscription status to 'cancelled' and records the cancellation date.
+2. (REQ-57) Cancellation updates the member's subscription_status to 'restricted'.
+3. (REQ-58) Future reservations under the cancelled subscription are automatically cancelled.
+4. A confirmation modal displays the impact (number of future reservations affected) before cancellation.";Medium;3;3;subscriptions
+
+Story;SUB: Subscription Management;[SUB-05] Personalized subscription pricing;"As an administrator, I want to configure a personalized subscription with a variable number of PT sessions so that pricing reflects individual training plans.
+
+Acceptance Criteria:
+1. (REQ-59) Pricing formula: Total = Base Fee + (Number of PT Sessions x 50 RON).
+2. (REQ-60) PT session count must be a positive integer.
+3. (REQ-61) System stores base fee, PT session count, and computed total separately to support receipt generation.
+4. Selecting the 'Personalized' subscription type reveals a PT sessions input field.
+5. Total is live-calculated as the administrator enters PT session count.";High;3;3;subscriptions
+
+Story;SUB: Subscription Management;[SUB-06] Automatic subscription expiry (scheduled job);"As the system, I want to automatically expire subscriptions past their end date so that administrators do not need to manually manage status transitions.
+
+Acceptance Criteria:
+1. (REQ-62) A background scheduled job runs daily at midnight.
+2. (REQ-63) Active subscriptions with end_date before the current date are set to 'expired'.
+3. (REQ-64) The associated member is automatically set to 'restricted' status.
+4. (REQ-65) An expiry notification email is sent to the member on the day their subscription expires.
+5. Job execution and any errors are logged in structured JSON.";High;5;5;subscriptions,scheduler,email
+
+Story;SUB: Subscription Management;[SUB-07] Subscription type configuration;"As an administrator, I want to define and manage the catalog of subscription types so that they are available for assignment to members.
+
+Acceptance Criteria:
+1. (REQ-66) Each subscription type has: a name, duration in days, and base fee in RON.
+2. (REQ-67) A subscription type in use by at least one active subscription cannot be deleted; it can only be archived.
+3. (REQ-68) Archived types do not appear in the new subscription form but remain readable for historical records.
+4. Subscription type names must be unique.";Medium;3;3;subscriptions,configuration
+
+Story;PAY: Payment Processing;[PAY-01] Online payment via payment gateway;"As a member, I want to pay for my subscription online by card so that I can activate my membership digitally.
+
+Acceptance Criteria:
+1. (REQ-69) Card data is collected exclusively through the gateway's certified JS SDK or hosted payment page.
+2. (REQ-70) System stores the gateway payment reference ID but never stores card numbers, CVVs, or expiry dates.
+3. (REQ-71) Payment status is updated via webhook, not based on client-side redirect alone.
+4. (REQ-72) System handles payment statuses: pending, succeeded, failed, refunded.
+5. Webhook signatures are verified using HMAC-SHA256.
+6. Failed payments update payment status and notify the member.";High;8;8;payments,integration
+
+Story;PAY: Payment Processing;[PAY-02] View payment history;"As a user, I want to view a chronological list of all payments so that I have a complete transaction record.
+
+Acceptance Criteria:
+1. (REQ-73) Each payment entry shows: payment date, subscription type, amount, currency, and status.
+2. (REQ-74) List is sorted by date descending by default.
+3. (REQ-75) Members see only their own payment history; administrators can view any member's history.
+4. Clicking a transaction shows full details and a link to the receipt.
+5. List is paginated.";High;2;2;payments
+
+Story;PAY: Payment Processing;[PAY-03] Payment receipt generation;"As a member, I want to receive and download a payment receipt so that I have proof of payment.
+
+Acceptance Criteria:
+1. (REQ-76) Receipt includes: receipt number, date, member name, subscription type, pricing breakdown, total amount, and gateway reference.
+2. (REQ-77) Receipts are downloadable as PDF files.
+3. (REQ-78) A receipt copy is emailed to the member within 2 minutes of payment confirmation.
+4. Members can download receipts on demand from their payment history.";Medium;5;5;payments,pdf,email
+
+Story;PAY: Payment Processing;[PAY-04] Monthly revenue report;"As an administrator, I want to generate a monthly revenue report so that I can track financial performance.
+
+Acceptance Criteria:
+1. (REQ-79) Report aggregates: total revenue for selected month, revenue by subscription type, and number of payments.
+2. (REQ-80) Report is filterable by month and year.
+3. (REQ-81) Report is exportable as CSV.
+4. Refunded payments are excluded from revenue totals (per REQ-84).";Medium;3;3;payments,reporting
+
+Story;PAY: Payment Processing;[PAY-05] Refund request tracking;"As an administrator, I want to log manual refund requests so that refunds are tracked even when processed outside the system.
+
+Acceptance Criteria:
+1. (REQ-82) Refund record stores: original payment ID, refund amount, reason, refund date, and the admin who logged it.
+2. (REQ-83) A payment may only be marked as refunded once.
+3. (REQ-84) Refunded payments are excluded from revenue report totals.
+4. Refund is logged via a form accessible from the payment detail page.";Low;3;3;payments
+
+Story;CLASS: Training Class Management;[CLASS-01] Create training class;"As an administrator, I want to create training class sessions so that members can discover and reserve spots.
+
+Acceptance Criteria:
+1. (REQ-85) Class record must contain: name, description, trainer (FK), facility (FK), start time, end time, and capacity.
+2. (REQ-86) System prevents creating a class in a facility if another class occupies an overlapping time slot in that facility.
+3. (REQ-87) System prevents assigning a trainer who already has a class at an overlapping time.
+4. Missing required fields highlight the field and prevent form submission.
+5. Class is immediately visible to members for reservation after creation.";High;5;5;classes
+
+Story;CLASS: Training Class Management;[CLASS-02] Edit training class details;"As an administrator, I want to edit training class details so that corrections and updates are reflected for members.
+
+Acceptance Criteria:
+1. (REQ-88) New capacity value cannot be less than the current number of active reservations.
+2. (REQ-89) Changing start or end time triggers email notifications to all members with active reservations.
+3. (REQ-90) Editing does not affect the status of existing reservations.
+4. Conflict checks (facility and trainer) are re-evaluated on save.";High;3;3;classes,email
+
+Story;CLASS: Training Class Management;[CLASS-03] Cancel training class;"As an administrator, I want to cancel a training class so that all reserved members are notified and spots are released.
+
+Acceptance Criteria:
+1. (REQ-91) Cancellation sets class status to 'cancelled'.
+2. (REQ-92) All active reservations for the class are set to 'cancelled'.
+3. (REQ-93) Each affected member receives an email notification within 5 minutes of class cancellation.
+4. Confirmation modal lists the number of affected reservations before cancellation.";High;3;3;classes,email
+
+Story;CLASS: Training Class Management;[CLASS-04] View class schedule;"As a user, I want to view the upcoming class schedule so that I can plan my training.
+
+Acceptance Criteria:
+1. (REQ-94) Schedule displays classes for at least the next 4 weeks.
+2. (REQ-95) Each class entry shows: name, trainer, facility, start time, end time, and available spots out of total capacity.
+3. (REQ-96) Past classes are hidden in the default view; accessible via a date range filter.
+4. (REQ-97) Trainer view highlights only their assigned classes.
+5. Toggle between weekly calendar and list view is supported.";Medium;3;3;classes
+
+Story;CLASS: Training Class Management;[CLASS-05] Class capacity enforcement;"As the system, I want to enforce the maximum participant limit atomically so that classes are never over-booked.
+
+Acceptance Criteria:
+1. (REQ-98) Spot check and decrement are performed atomically to prevent race conditions under concurrent requests.
+2. (REQ-99) A class is considered full when active reservations equal the capacity field.
+3. (REQ-100) Available spot counts are updated in real time; the schedule view must not show stale counts.
+4. A full-class reservation attempt returns a 'class is full' message and offers the waitlist.";High;5;5;classes,reservations
+
+Story;CLASS: Training Class Management;[CLASS-06] Assign trainer to class;"As an administrator, I want to assign or reassign a trainer to a class so that the schedule is always staffed correctly.
+
+Acceptance Criteria:
+1. (REQ-101) System checks for scheduling conflicts before confirming a trainer assignment.
+2. (REQ-102) A trainer may not be assigned to two classes with overlapping time slots.
+3. (REQ-103) Reassigning a trainer sends a notification to both the old and new trainer.
+4. Deactivated trainers do not appear in the trainer selection dropdown.";Medium;3;3;classes,trainers
+
+Story;RES: Reservation System;[RES-01] Make a class reservation;"As an active member, I want to reserve a spot in an upcoming class so that I am guaranteed a place.
+
+Acceptance Criteria:
+1. (REQ-104) Only members with 'active' subscription status may make reservations.
+2. (REQ-105) A member may not have more than one active reservation for the same class.
+3. (REQ-106) Spot reservation is atomic to prevent double-booking under concurrent requests.
+4. (REQ-107) A confirmation notification is sent immediately after a successful reservation.
+5. Restricted or inactive members see a message explaining their status.";High;5;5;reservations
+
+Story;RES: Reservation System;[RES-02] Cancel a reservation;"As a user, I want to cancel a reservation so that the spot is released for other members.
+
+Acceptance Criteria:
+1. (REQ-108) Cancellation sets reservation status to 'cancelled' and records the cancellation timestamp.
+2. (REQ-109) Cancellations within 2 hours of class start time are flagged as late cancellations.
+3. (REQ-110) On cancellation, the system checks the waitlist and offers the spot to the next waitlisted member.
+4. A confirmation step is shown before cancellation is processed.
+5. Administrators can cancel any reservation; members can only cancel their own.";High;3;3;reservations
+
+Story;RES: Reservation System;[RES-03] View own reservations;"As a member, I want to view all my reservations so that I can track upcoming and past classes.
+
+Acceptance Criteria:
+1. (REQ-111) Reservation list is split into two sections: Upcoming and Past.
+2. (REQ-112) Each entry shows: class name, trainer, facility, date and time, and reservation status.
+3. (REQ-113) Upcoming reservations include a Cancel button if cancellation is still permitted.
+4. Clicking a reservation shows full class details.";High;2;2;reservations
+
+Story;RES: Reservation System;[RES-04] View all reservations for a class;"As an administrator or trainer, I want to view the full participant list for a class so that I can prepare and manage attendance.
+
+Acceptance Criteria:
+1. (REQ-114) Participant list shows: member name, email, reservation date, and reservation status.
+2. (REQ-115) List is downloadable as CSV by administrators.
+3. (REQ-116) Total participant count and remaining capacity are displayed at the top.
+4. Trainer view includes attendance tracking controls.";Medium;2;2;reservations
+
+Story;RES: Reservation System;[RES-05] Waitlist management;"As a member, I want to join the waitlist for a full class so that I am notified if a spot becomes available.
+
+Acceptance Criteria:
+1. (REQ-117) Waitlist is ordered strictly by the time the member joined.
+2. (REQ-118) When promoted from the waitlist, the member receives an email and/or SMS with a 2-hour confirmation window.
+3. (REQ-119) If the promoted member does not confirm within 2 hours, the spot is offered to the next waitlisted member.
+4. (REQ-120) Members can remove themselves from a waitlist.
+5. Waitlist offer is triggered immediately when an active reservation is cancelled.";Medium;5;5;reservations,notifications
+
+Story;RES: Reservation System;[RES-06] Reservation confirmation notification;"As a member, I want to receive a confirmation notification immediately after reserving a class so that I have all details in one place.
+
+Acceptance Criteria:
+1. (REQ-121) Confirmation notification is sent within 1 minute of the reservation being created.
+2. (REQ-122) Email includes: class name, trainer name, facility name, date, start time, end time, and a cancellation link.
+3. (REQ-123) Notification is sent via email; SMS is optional if member has opted in with a phone on file.
+4. Delivery failures are logged and retried up to 3 times.";High;3;3;reservations,notifications,email
+
+Story;RES: Reservation System;[RES-07] Reservation reminder notification;"As a member, I want to receive a reminder before my class so that I do not forget to attend.
+
+Acceptance Criteria:
+1. (REQ-124) Reminder is sent 24 hours before class start time.
+2. (REQ-125) Reminder includes: class name, trainer, facility, start time, and a cancellation link.
+3. (REQ-126) Members who have already cancelled do not receive a reminder.
+4. (REQ-127) Members can opt out of reminder notifications from profile settings.
+5. Scheduler runs hourly and identifies reservations starting in approximately 24 hours.";Medium;3;3;reservations,notifications,scheduler
+
+Story;TRAIN: Trainer Management;[TRAIN-01] Create trainer profile;"As an administrator, I want to register new trainers so that they can be assigned to classes.
+
+Acceptance Criteria:
+1. (REQ-128) Creation form captures: first name, last name, email, phone, and specializations.
+2. (REQ-129) A welcome email with a password-set link is sent to the trainer on account creation.
+3. (REQ-130) New trainer account is assigned the 'trainer' role by default.
+4. Duplicate email returns a validation error without creating the record.";High;3;3;trainers
+
+Story;TRAIN: Trainer Management;[TRAIN-02] Edit trainer profile;"As a user, I want to edit a trainer profile so that profile information stays current.
+
+Acceptance Criteria:
+1. (REQ-131) Trainers may edit: phone number, bio/description, and profile photo.
+2. (REQ-132) Administrators may edit all fields including specializations and active status.
+3. A trainer attempting to edit another trainer's profile receives 403 Forbidden.
+4. Changes are validated before persistence with field-level error messages.";Medium;2;2;trainers
+
+Story;TRAIN: Trainer Management;[TRAIN-03] Deactivate trainer account;"As an administrator, I want to deactivate a trainer account so that they can no longer log in or be assigned to classes.
+
+Acceptance Criteria:
+1. (REQ-133) Deactivation sets the trainer's is_active flag to false.
+2. (REQ-134) Upcoming classes assigned to the deactivated trainer are flagged with 'trainer missing' status and appear in an admin alert dashboard.
+3. (REQ-135) Deactivated trainers do not appear in the trainer selection dropdown when creating or editing a class.
+4. Confirmation modal lists upcoming affected classes before deactivation.";Medium;3;3;trainers
+
+Story;TRAIN: Trainer Management;[TRAIN-04] View trainer schedule;"As a trainer or administrator, I want to view a trainer's upcoming class schedule so that workload and planning can be managed.
+
+Acceptance Criteria:
+1. (REQ-136) Schedule shows: class name, facility, start time, end time, and current participant count.
+2. (REQ-137) Schedule is viewable as a list (default) or a weekly calendar.
+3. (REQ-138) Schedule covers at least the next 30 days.
+4. Trainers can only view their own schedule; administrators can view any trainer's schedule.";Medium;2;2;trainers
+
+Story;TRAIN: Trainer Management;[TRAIN-05] Trainer availability management;"As a trainer, I want to define my recurring weekly availability so that administrators can schedule me during suitable hours.
+
+Acceptance Criteria:
+1. (REQ-139) Availability is stored as a recurring weekly schedule (day of week + time range).
+2. (REQ-140) Availability is advisory only and does not prevent class assignment outside available hours.
+3. (REQ-141) The availability grid covers the full 7-day week in 30-minute intervals.
+4. A soft warning is shown when assigning a trainer to a class outside their stated availability.";Low;3;3;trainers
+
+Story;FAC: Facility Management;[FAC-01] Create facility;"As an administrator, I want to define facilities so that they can be assigned to training classes.
+
+Acceptance Criteria:
+1. (REQ-142) Facility record contains: name, description, and maximum capacity (persons).
+2. (REQ-143) Facility names must be unique within the system.
+3. (REQ-144) Newly created facilities are immediately available in the class creation dropdown.";High;2;2;facilities
+
+Story;FAC: Facility Management;[FAC-02] Edit facility details;"As an administrator, I want to edit facility details so that information stays accurate as the center evolves.
+
+Acceptance Criteria:
+1. (REQ-145) System prevents saving a new capacity value if any future scheduled class for that facility has more reservations than the proposed new capacity.
+2. (REQ-146) Changes to the facility name are reflected everywhere the facility is referenced in the UI.
+3. A warning is shown when reducing capacity that would affect scheduled classes.";Medium;2;2;facilities
+
+Story;FAC: Facility Management;[FAC-03] Facility occupancy report;"As an administrator, I want to generate a facility utilisation report so that I can make data-driven decisions about scheduling.
+
+Acceptance Criteria:
+1. (REQ-147) Report shows per facility: total scheduled class hours, total available participant slots, total reservations made, and occupancy rate (reservations / slots as a percentage).
+2. (REQ-148) Report is filterable by date range and by individual facility.
+3. (REQ-149) Report is exportable as CSV.";Medium;3;3;facilities,reporting
+
+Story;FAC: Facility Management;[FAC-04] Facility availability calendar;"As an administrator, I want to view a calendar of facility bookings so that I can avoid scheduling conflicts at a glance.
+
+Acceptance Criteria:
+1. (REQ-150) Calendar displays all facilities side by side for the selected week.
+2. (REQ-151) Each booked block displays: class name and trainer name.
+3. (REQ-152) Free (unbooked) slots are visually distinct from booked slots.
+4. Clicking a booking block shows class detail.
+5. Navigation to the next or previous week loads the corresponding schedule.";Low;5;5;facilities
+
+Story;REPORT: Reporting & Notifications;[REPORT-01] Member activity report;"As an administrator, I want to generate a member activity report so that I can identify engaged and inactive members.
+
+Acceptance Criteria:
+1. (REQ-153) Report shows per member: total reservations made, total cancellations, and late cancellation count within the selected period.
+2. (REQ-154) Report is sortable by any column.
+3. (REQ-155) Report is filterable by date range and by subscription status.
+4. (REQ-156) Report is exportable as CSV.";Low;3;3;reporting
+
+Story;REPORT: Reporting & Notifications;[REPORT-02] Subscription expiry notifications;"As the system, I want to proactively notify members when their subscription is approaching expiry so that they have time to renew before being restricted.
+
+Acceptance Criteria:
+1. (REQ-157) Expiry reminder emails are sent at 7 days and again at 1 day before the subscription end date.
+2. (REQ-158) Reminder email includes: expiry date, subscription type name, and a direct link to the renewal/payment page.
+3. (REQ-159) If a member renews before the reminder is due, the reminder is not sent.
+4. (REQ-160) Members can opt out of expiry reminders from profile settings.
+5. Scheduler runs daily and identifies matching subscriptions.";Medium;3;3;notifications,scheduler,email
+
+Story;INFRA: Infrastructure & Project Setup;[NFR-01] Security hardening;"As a security-conscious team, I want the application to enforce security controls so that it is protected against common attacks.
+
+Acceptance Criteria:
+1. Passwords are stored as bcrypt hashes with minimum cost factor 12.
+2. JWT tokens are signed using RS256 or HS256 with a secret of at least 256 bits.
+3. All API endpoints validate and sanitise inputs via SQLAlchemy ORM parameterisation (no raw SQL).
+4. Rate limiting is applied to auth endpoints: max 10 requests per IP per minute.
+5. All traffic uses HTTPS with TLS 1.2+. HTTP redirects to HTTPS.
+6. A GDPR data deletion endpoint allows administrators to fully remove a member's personal data.
+7. Sensitive config values are loaded from environment variables only.";High;5;5;security,nfr
+
+Story;INFRA: Infrastructure & Project Setup;[NFR-02] Test suite with 70% coverage;"As a developer, I want a comprehensive test suite so that regressions are caught before they reach production.
+
+Acceptance Criteria:
+1. Unit tests cover all service-layer business logic functions independently of the HTTP framework.
+2. Integration tests use httpx AsyncClient to test all API endpoints against a real test database.
+3. Aggregate test coverage is at or above 70% for both backend and frontend.
+4. Tests run successfully in the CI pipeline.
+5. pytest-asyncio is used for async test support.";High;8;8;testing,nfr

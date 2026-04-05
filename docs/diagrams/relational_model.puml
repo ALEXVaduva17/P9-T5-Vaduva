@@ -1,0 +1,224 @@
+@startuml Fitness Center - Relational Model
+!theme plain
+skinparam linetype ortho
+skinparam EntityBorderColor #336699
+skinparam EntityBackgroundColor #EEF4FF
+skinparam EntityHeaderBackgroundColor #336699
+skinparam EntityFontColor #000000
+skinparam ArrowColor #555555
+skinparam shadowing false
+
+' ──────────────────────────────────────────────────────────────
+' LEGEND / NOTATION
+'   PK  – Primary Key
+'   FK  – Foreign Key
+'   UQ  – Unique constraint
+'   NN  – Not Null
+'   IDX – Indexed
+' ──────────────────────────────────────────────────────────────
+
+entity "users" as users {
+    * id          : UUID          <<PK>>
+    --
+    * email       : VARCHAR(255)  <<UQ, NN>>
+    * hashed_password : TEXT      <<NN>>
+    * role        : ENUM(admin, member, trainer) <<NN>>
+    * is_active   : BOOLEAN       <<NN, default=true>>
+    * created_at  : TIMESTAMPTZ   <<NN>>
+    * updated_at  : TIMESTAMPTZ   <<NN>>
+}
+
+entity "members" as members {
+    * id                  : UUID    <<PK>>
+    --
+    * user_id             : UUID    <<FK→users, UQ, NN>>
+    * first_name          : VARCHAR(100) <<NN>>
+    * last_name           : VARCHAR(100) <<NN>>
+      phone               : VARCHAR(30)
+      date_of_birth       : DATE
+    * subscription_status : ENUM(active, expired,\ncancelled, restricted) <<NN>>
+    * notifications_opt_out : BOOLEAN <<NN, default=false>>
+    * created_at          : TIMESTAMPTZ <<NN>>
+    * updated_at          : TIMESTAMPTZ <<NN>>
+}
+
+entity "trainers" as trainers {
+    * id            : UUID    <<PK>>
+    --
+    * user_id       : UUID    <<FK→users, UQ, NN>>
+    * first_name    : VARCHAR(100) <<NN>>
+    * last_name     : VARCHAR(100) <<NN>>
+      phone         : VARCHAR(30)
+      bio           : TEXT
+      specializations : TEXT[]
+      profile_photo_url : TEXT
+    * is_active     : BOOLEAN <<NN, default=true>>
+    * created_at    : TIMESTAMPTZ <<NN>>
+    * updated_at    : TIMESTAMPTZ <<NN>>
+}
+
+entity "subscription_types" as sub_types {
+    * id            : UUID    <<PK>>
+    --
+    * name          : VARCHAR(100) <<UQ, NN>>
+    * duration_days : INTEGER <<NN, CHECK > 0>>
+    * base_fee_bani : INTEGER <<NN, CHECK >= 0>>
+    * is_archived   : BOOLEAN <<NN, default=false>>
+    * created_at    : TIMESTAMPTZ <<NN>>
+    * updated_at    : TIMESTAMPTZ <<NN>>
+}
+
+entity "subscriptions" as subscriptions {
+    * id                 : UUID    <<PK>>
+    --
+    * member_id          : UUID    <<FK→members, NN, IDX>>
+    * type_id            : UUID    <<FK→subscription_types, NN>>
+    * base_fee_bani      : INTEGER <<NN>>
+      pt_sessions        : INTEGER <<CHECK >= 0, default=0>>
+    * total_amount_bani  : INTEGER <<NN>>
+    * start_date         : DATE    <<NN>>
+    * end_date           : DATE    <<NN>>
+    * status             : ENUM(active, expired,\ncancelled, restricted) <<NN>>
+      cancellation_date  : DATE
+    * created_at         : TIMESTAMPTZ <<NN>>
+    * updated_at         : TIMESTAMPTZ <<NN>>
+}
+
+note bottom of subscriptions
+  CONSTRAINT: no two active subscriptions
+  may overlap for the same member_id.
+  total_amount_bani = base_fee_bani
+                    + (pt_sessions * 5000)
+end note
+
+entity "payments" as payments {
+    * id                    : UUID    <<PK>>
+    --
+    * subscription_id       : UUID    <<FK→subscriptions, NN, IDX>>
+      refunded_by_admin_id  : UUID    <<FK→users>>
+    * amount_bani           : INTEGER <<NN, CHECK > 0>>
+    * currency              : CHAR(3) <<NN, default='RON'>>
+    * gateway_ref           : VARCHAR(255) <<UQ, NN>>
+    * status                : ENUM(pending, succeeded,\nfailed, refunded) <<NN>>
+      paid_at               : TIMESTAMPTZ
+      refunded_at           : TIMESTAMPTZ
+      refund_amount_bani    : INTEGER
+      refund_note           : TEXT
+    * created_at            : TIMESTAMPTZ <<NN>>
+    * updated_at            : TIMESTAMPTZ <<NN>>
+}
+
+entity "facilities" as facilities {
+    * id          : UUID    <<PK>>
+    --
+    * name        : VARCHAR(150) <<UQ, NN>>
+      description : TEXT
+    * capacity    : INTEGER <<NN, CHECK > 0>>
+    * created_at  : TIMESTAMPTZ <<NN>>
+    * updated_at  : TIMESTAMPTZ <<NN>>
+}
+
+entity "classes" as classes {
+    * id          : UUID    <<PK>>
+    --
+    * trainer_id  : UUID    <<FK→trainers, NN, IDX>>
+    * facility_id : UUID    <<FK→facilities, NN, IDX>>
+    * name        : VARCHAR(150) <<NN>>
+      description : TEXT
+    * start_time  : TIMESTAMPTZ  <<NN>>
+    * end_time    : TIMESTAMPTZ  <<NN>>
+    * capacity    : INTEGER <<NN, CHECK > 0>>
+    * status      : ENUM(scheduled, cancelled) <<NN>>
+    * created_at  : TIMESTAMPTZ <<NN>>
+    * updated_at  : TIMESTAMPTZ <<NN>>
+}
+
+note bottom of classes
+  UNIQUE(facility_id, start_time, end_time)
+  – no facility double-booking.
+  UNIQUE(trainer_id, start_time, end_time)
+  – no trainer double-booking.
+end note
+
+entity "reservations" as reservations {
+    * id               : UUID    <<PK>>
+    --
+    * member_id        : UUID    <<FK→members, NN, IDX>>
+    * class_id         : UUID    <<FK→classes, NN, IDX>>
+    * status           : ENUM(active, cancelled,\nwaitlisted) <<NN>>
+    * is_late_cancel   : BOOLEAN <<NN, default=false>>
+      waitlist_position : INTEGER
+      confirmed_at     : TIMESTAMPTZ
+      cancelled_at     : TIMESTAMPTZ
+    * created_at       : TIMESTAMPTZ <<NN>>
+    * updated_at       : TIMESTAMPTZ <<NN>>
+}
+
+note bottom of reservations
+  UNIQUE(member_id, class_id)
+  – one reservation per member per class.
+end note
+
+entity "trainer_availability" as trainer_avail {
+    * id           : UUID    <<PK>>
+    --
+    * trainer_id   : UUID    <<FK→trainers, NN, IDX>>
+    * day_of_week  : SMALLINT <<NN, CHECK 0-6>>
+    * start_time   : TIME    <<NN>>
+    * end_time     : TIME    <<NN>>
+    * created_at   : TIMESTAMPTZ <<NN>>
+    * updated_at   : TIMESTAMPTZ <<NN>>
+}
+
+entity "password_reset_tokens" as pwd_tokens {
+    * id          : UUID    <<PK>>
+    --
+    * user_id     : UUID    <<FK→users, NN, IDX>>
+    * token_hash  : TEXT    <<UQ, NN>>
+    * expires_at  : TIMESTAMPTZ <<NN>>
+    * used        : BOOLEAN <<NN, default=false>>
+    * created_at  : TIMESTAMPTZ <<NN>>
+    * updated_at  : TIMESTAMPTZ <<NN>>
+}
+
+' ──────────────────────────────────────────────────────────────
+' RELATIONSHIPS
+' ──────────────────────────────────────────────────────────────
+
+' One user has one member profile
+users           ||--o| members         : "1 : 0..1"
+
+' One user has one trainer profile
+users           ||--o| trainers        : "1 : 0..1"
+
+' One member has many subscriptions
+members         ||--o{ subscriptions   : "1 : many"
+
+' One subscription type used in many subscriptions
+sub_types       ||--o{ subscriptions   : "1 : many"
+
+' One subscription has many payments
+subscriptions   ||--o{ payments        : "1 : many"
+
+' One admin can log many refunds
+users           ||--o{ payments        : "logs refund"
+
+' One trainer teaches many classes
+trainers        ||--o{ classes         : "1 : many"
+
+' One facility hosts many classes
+facilities      ||--o{ classes         : "1 : many"
+
+' One member makes many reservations
+members         ||--o{ reservations    : "1 : many"
+
+' One class has many reservations
+classes         ||--o{ reservations    : "1 : many"
+
+' One trainer has many availability windows
+trainers        ||--o{ trainer_avail   : "1 : many"
+
+' One user has many password reset tokens
+users           ||--o{ pwd_tokens      : "1 : many"
+
+@enduml

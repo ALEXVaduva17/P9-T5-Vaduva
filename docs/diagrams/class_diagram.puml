@@ -1,0 +1,282 @@
+@startuml Fitness Center - Class Diagram
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classBorderColor #336699
+skinparam classBackgroundColor #EEF4FF
+skinparam classHeaderBackgroundColor #336699
+skinparam classHeaderFontColor #FFFFFF
+skinparam ArrowColor #555555
+skinparam shadowing false
+skinparam packageBorderColor #AAAAAA
+skinparam packageBackgroundColor #FAFAFA
+
+' ──────────────── Enumerations ────────────────
+
+enum UserRole {
+    admin
+    member
+    trainer
+}
+
+enum SubscriptionStatus {
+    active
+    expired
+    cancelled
+    restricted
+}
+
+enum PaymentStatus {
+    pending
+    succeeded
+    failed
+    refunded
+}
+
+enum ClassStatus {
+    scheduled
+    cancelled
+}
+
+enum ReservationStatus {
+    active
+    cancelled
+    waitlisted
+}
+
+' ──────────────── Core Entity (Base) ────────────────
+
+abstract class BaseEntity {
+    + id : UUID <<PK>>
+    + created_at : timestamptz
+    + updated_at : timestamptz
+}
+
+' ──────────────── User ────────────────
+
+class User {
+    + email : String <<unique>>
+    + hashed_password : String
+    + role : UserRole
+    + is_active : Boolean
+    --
+    + verify_password(plain: String) : Boolean
+    + generate_access_token() : String
+    + generate_refresh_token() : String
+}
+
+' ──────────────── Member ────────────────
+
+class Member {
+    + user_id : UUID <<FK>>
+    + first_name : String
+    + last_name : String
+    + phone : String
+    + date_of_birth : Date
+    + subscription_status : SubscriptionStatus
+    + notifications_opt_out : Boolean
+    --
+    + full_name() : String
+    + is_eligible_to_reserve() : Boolean
+    + deactivate() : void
+    + reactivate() : void
+}
+
+' ──────────────── Trainer ────────────────
+
+class Trainer {
+    + user_id : UUID <<FK>>
+    + first_name : String
+    + last_name : String
+    + phone : String
+    + bio : String
+    + specializations : String[]
+    + profile_photo_url : String
+    + is_active : Boolean
+    --
+    + full_name() : String
+    + has_conflict(start: DateTime, end: DateTime) : Boolean
+    + deactivate() : void
+}
+
+' ──────────────── SubscriptionType ────────────────
+
+class SubscriptionType {
+    + name : String <<unique>>
+    + duration_days : Integer
+    + base_fee_bani : Integer
+    + is_archived : Boolean
+    --
+    + calculate_end_date(start: Date) : Date
+    + archive() : void
+    + is_deletable() : Boolean
+}
+
+' ──────────────── Subscription ────────────────
+
+class Subscription {
+    + member_id : UUID <<FK>>
+    + type_id : UUID <<FK>>
+    + base_fee_bani : Integer
+    + pt_sessions : Integer
+    + total_amount_bani : Integer
+    + start_date : Date
+    + end_date : Date
+    + status : SubscriptionStatus
+    + cancellation_date : Date
+    --
+    + calculate_total() : Integer
+    + is_expired() : Boolean
+    + cancel() : void
+    + renew() : Subscription
+    + pricing_breakdown() : String
+}
+
+note right of Subscription
+  Total = base_fee_bani
+        + (pt_sessions × 5000 bani)
+  (1 PT session = 50 RON = 5000 bani)
+end note
+
+' ──────────────── Payment ────────────────
+
+class Payment {
+    + subscription_id : UUID <<FK>>
+    + amount_bani : Integer
+    + currency : String
+    + gateway_ref : String <<unique>>
+    + status : PaymentStatus
+    + paid_at : timestamptz
+    + refunded_at : timestamptz
+    + refund_note : String
+    + refunded_by_admin_id : UUID <<FK>>
+    --
+    + generate_receipt() : PDF
+    + log_refund(amount: Integer, reason: String, admin_id: UUID) : void
+    + is_refundable() : Boolean
+}
+
+' ──────────────── Facility ────────────────
+
+class Facility {
+    + name : String <<unique>>
+    + description : String
+    + capacity : Integer
+    --
+    + is_available(start: DateTime, end: DateTime) : Boolean
+    + scheduled_classes(start: Date, end: Date) : List<TrainingClass>
+}
+
+' ──────────────── TrainingClass ────────────────
+
+class TrainingClass {
+    + trainer_id : UUID <<FK>>
+    + facility_id : UUID <<FK>>
+    + name : String
+    + description : String
+    + start_time : DateTime
+    + end_time : DateTime
+    + capacity : Integer
+    + status : ClassStatus
+    --
+    + available_spots() : Integer
+    + is_full() : Boolean
+    + cancel() : void
+    + active_reservations() : List<Reservation>
+    + waitlisted_members() : List<Reservation>
+}
+
+' ──────────────── Reservation ────────────────
+
+class Reservation {
+    + member_id : UUID <<FK>>
+    + class_id : UUID <<FK>>
+    + status : ReservationStatus
+    + is_late_cancel : Boolean
+    + waitlist_position : Integer
+    + confirmed_at : timestamptz
+    + cancelled_at : timestamptz
+    --
+    + cancel() : void
+    + promote_from_waitlist() : void
+    + is_cancellable() : Boolean
+    + flag_late_cancellation() : void
+}
+
+' ──────────────── TrainerAvailability ────────────────
+
+class TrainerAvailability {
+    + trainer_id : UUID <<FK>>
+    + day_of_week : Integer
+    + start_time : Time
+    + end_time : Time
+    --
+    + covers_slot(day: Integer, start: Time, end: Time) : Boolean
+}
+
+' ──────────────── PasswordResetToken ────────────────
+
+class PasswordResetToken {
+    + user_id : UUID <<FK>>
+    + token_hash : String
+    + expires_at : timestamptz
+    + used : Boolean
+    --
+    + is_valid() : Boolean
+    + invalidate() : void
+}
+
+' ══════════════════════════════════════════════════════════════
+' INHERITANCE
+' ══════════════════════════════════════════════════════════════
+
+BaseEntity <|-- User
+BaseEntity <|-- Member
+BaseEntity <|-- Trainer
+BaseEntity <|-- SubscriptionType
+BaseEntity <|-- Subscription
+BaseEntity <|-- Payment
+BaseEntity <|-- Facility
+BaseEntity <|-- TrainingClass
+BaseEntity <|-- Reservation
+BaseEntity <|-- TrainerAvailability
+BaseEntity <|-- PasswordResetToken
+
+' ══════════════════════════════════════════════════════════════
+' ASSOCIATIONS
+' ══════════════════════════════════════════════════════════════
+
+' User ↔ Member / Trainer (one-to-one)
+User "1" -- "0..1" Member        : has profile >
+User "1" -- "0..1" Trainer       : has profile >
+
+' Member ↔ Subscription (one-to-many)
+Member "1" --o{ Subscription      : holds >
+
+' SubscriptionType ↔ Subscription
+SubscriptionType "1" --o{ Subscription : defines pricing for >
+
+' Subscription ↔ Payment
+Subscription "1" --o{ Payment    : generates >
+
+' Trainer ↔ TrainingClass
+Trainer "1" --o{ TrainingClass   : teaches >
+
+' Facility ↔ TrainingClass
+Facility "1" --o{ TrainingClass  : hosts >
+
+' Member ↔ Reservation
+Member "1" --o{ Reservation      : makes >
+
+' TrainingClass ↔ Reservation
+TrainingClass "1" --o{ Reservation : has spots for >
+
+' Trainer ↔ TrainerAvailability
+Trainer "1" --o{ TrainerAvailability : defines >
+
+' User ↔ PasswordResetToken
+User "1" --o{ PasswordResetToken  : requests >
+
+' Payment ↔ Admin (refund logger)
+User "0..1" --o{ Payment          : logs refund >
+
+@enduml
