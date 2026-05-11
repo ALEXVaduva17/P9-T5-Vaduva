@@ -1,0 +1,180 @@
+@startuml Sequence_Rezervare
+' ============================================================
+' SEQUENCE DIAGRAM #2 — Rezervare Loc la Clasă
+' REQ-6, REQ-10, REQ-11
+' ============================================================
+title **Diagrama de Secvență #2 — Rezervare Loc la Clasă**
+
+skinparam sequence {
+  ArrowColor #636E72
+  ActorBorderColor #2D3436
+  LifeLineBorderColor #636E72
+  LifeLineBackgroundColor #F8F9FA
+  ParticipantBorderColor #2D3436
+  ParticipantBackgroundColor #74B9FF
+  BoxBorderColor #2D3436
+}
+skinparam note {
+  BackgroundColor #FFEAA7
+  BorderColor #2D3436
+}
+
+actor "Membru" as User #74B9FF
+participant "Frontend\n(React SPA)" as FE #DFE6E9
+participant "ClassController\n(/api/classes)" as CC #A29BFE
+participant "ReservationController\n(/api/reservations)" as RC #A29BFE
+participant "ReservationService" as RS #00CEC9
+participant "SubscriptionService" as SS #00CEC9
+participant "ClassRepository" as CR #FDCB6E
+participant "ReservationRepository" as RR #FDCB6E
+database "PostgreSQL" as DB #E17055
+
+== Faza 1: Încărcare Clase Disponibile ==
+
+User -> FE : Accesează secțiunea\n„Clase disponibile"
+activate FE
+
+FE -> CC : **GET /api/classes?available=true**\nHeader: Authorization: Bearer <JWT>
+activate CC
+
+CC -> CR : findAvailableClasses()
+activate CR
+
+CR -> DB : SELECT c.id, c.name, c.start_time,\nc.end_time, c.capacity,\nt.first_name AS trainer,\nf.name AS facility,\n(c.capacity - COUNT(r.id)) AS spots_left\nFROM classes c\nLEFT JOIN reservations r\n  ON r.class_id = c.id\n  AND r.status = 'confirmed'\nJOIN trainers t ON c.trainer_id = t.id\nJOIN facilities f ON c.facility_id = f.id\nWHERE c.start_time > NOW()\nGROUP BY c.id, t.id, f.id\nHAVING (c.capacity - COUNT(r.id)) > 0\nORDER BY c.start_time ASC
+activate DB
+DB --> CR : Lista clase [ ]
+deactivate DB
+
+CR --> CC : List<ClassDTO>
+deactivate CR
+
+CC --> FE : **200 OK**\n[ { id, name, trainer, facility,\nstart_time, spots_left }, ... ]
+deactivate CC
+
+FE --> User : Afișează tabel clase\n(Nume | Antrenor | Sală |\nOră | Locuri libere | [Rezervă])
+deactivate FE
+
+== Faza 2: Creare Rezervare ==
+
+User -> FE : Selectează clasa „Yoga"\nApasă butonul **„Rezervă"**
+activate FE
+
+FE -> FE : Dialog confirmare:\n„Confirmați rezervarea\nla Yoga, 15.05 ora 10:00?"
+
+User -> FE : Confirmă (Da)
+
+FE -> RC : **POST /api/reservations**\n{ class_id: 42 }\nHeader: Authorization: Bearer <JWT>
+activate RC
+
+RC -> RC : Extrage member_id din JWT
+
+RC -> RS : createReservation(memberId, classId)
+activate RS
+
+|||
+note over RS
+  **Începe lanțul de 4 verificări**
+  (fail-fast: prima eșuată oprește fluxul)
+end note
+|||
+
+' ── VERIFICARE #1: ABONAMENT ACTIV ──
+RS -> SS : getActiveSubscription(memberId)
+activate SS
+
+SS -> DB : SELECT * FROM subscriptions\nWHERE member_id = ?\nAND status = 'active'\nAND end_date >= CURRENT_DATE
+activate DB
+DB --> SS : Subscription (sau null)
+deactivate DB
+
+alt #FFE6E6 Verificare #1 EȘUATĂ: Fără abonament activ
+  SS --> RS : null
+  deactivate SS
+  RS --> RC : throw NoActiveSubscriptionException
+  RC --> FE : **403 Forbidden**\n{ error: "Nu aveți un abonament activ.",\ncode: "NO_ACTIVE_SUBSCRIPTION" }
+  FE --> User : Eroare + buton\n„Achiziționează Abonament →"
+else #E6FFE6 Verificare #1 OK: Abonament activ ✅
+  SS --> RS : SubscriptionDTO\n{ id, type, end_date, status: "active" }
+  deactivate SS
+end
+
+' ── VERIFICARE #2: CONT NERESTRICȚIONAT ──
+RS -> DB : SELECT * FROM restricted_clients\nWHERE member_id = ?
+activate DB
+DB --> RS : RestrictedRecord (sau null)
+deactivate DB
+
+alt #FFE6E6 Verificare #2 EȘUATĂ: Membru restricționat
+  RS --> RC : throw MemberRestrictedException
+  RC --> FE : **403 Forbidden**\n{ error: "Contul dvs. este restricționat.\nReînnoiți abonamentul.",\ncode: "MEMBER_RESTRICTED" }
+  FE --> User : Eroare cont restricționat
+else #E6FFE6 Verificare #2 OK: Cont valid ✅
+end
+
+' ── VERIFICARE #3: LOCURI DISPONIBILE ──
+RS -> CR : getClassWithCapacity(classId)
+activate CR
+
+CR -> DB : SELECT c.capacity,\nCOUNT(r.id) AS current_bookings\nFROM classes c\nLEFT JOIN reservations r\n  ON r.class_id = c.id\n  AND r.status = 'confirmed'\nWHERE c.id = ?\nGROUP BY c.id
+activate DB
+DB --> CR : { capacity: 20,\ncurrent_bookings: 20 }
+deactivate DB
+
+CR --> RS : ClassCapacityDTO
+deactivate CR
+
+alt #FFE6E6 Verificare #3 EȘUATĂ: Clasă plină (current_bookings >= capacity)
+  RS --> RC : throw ClassFullException
+  RC --> FE : **409 Conflict**\n{ error: "Nu mai sunt locuri\ndisponibile la această clasă.",\ncode: "CLASS_FULL" }
+  FE --> User : Eroare clasă plină
+else #E6FFE6 Verificare #3 OK: Locuri disponibile ✅
+end
+
+' ── VERIFICARE #4: FĂRĂ DUPLICAT ──
+RS -> RR : findExistingReservation(memberId, classId)
+activate RR
+
+RR -> DB : SELECT * FROM reservations\nWHERE member_id = ?\nAND class_id = ?\nAND status = 'confirmed'
+activate DB
+DB --> RR : Reservation (sau null)
+deactivate DB
+
+RR --> RS : existingReservation (sau null)
+deactivate RR
+
+alt #FFE6E6 Verificare #4 EȘUATĂ: Rezervare duplicat
+  RS --> RC : throw DuplicateReservationException
+  RC --> FE : **409 Conflict**\n{ error: "Aveți deja o rezervare\npentru această clasă.",\ncode: "DUPLICATE_RESERVATION" }
+  FE --> User : Avertisment duplicat
+else #E6FFE6 Verificare #4 OK: Fără duplicat ✅
+end
+
+|||
+note over RS
+  **Toate cele 4 verificări trecute ✅**
+  Se procedează la crearea rezervării.
+end note
+|||
+
+' ── CREARE REZERVARE ──
+RS -> RR : save(newReservation)
+activate RR
+
+RR -> DB : INSERT INTO reservations\n(member_id, class_id, reserved_at,\nstatus)\nVALUES (?, ?, NOW(), 'confirmed')\nRETURNING id, reserved_at
+activate DB
+DB --> RR : { id: 1001, reserved_at: "..." }
+deactivate DB
+
+RR --> RS : ReservationEntity
+deactivate RR
+
+RS --> RC : ReservationDTO\n{ id: 1001, class_name: "Yoga",\ntrainer: "Ion Popescu",\nfacility: "Sala A",\ndate: "15.05.2026",\ntime: "10:00 - 11:00",\nstatus: "confirmed" }
+deactivate RS
+
+RC --> FE : **201 Created**\n{ reservation }
+deactivate RC
+
+FE --> User : ✅ Confirmare:\n„Rezervare confirmată!\nClasa: Yoga\nData: 15.05.2026, 10:00\nSala: Sala A\nAntrenor: Ion Popescu"
+deactivate FE
+
+@enduml

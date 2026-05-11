@@ -1,0 +1,170 @@
+@startuml Sequence_Autentificare
+' ============================================================
+' SEQUENCE DIAGRAM #1 — Procesul de Autentificare
+' REQ-1, REQ-2, REQ-3
+' ============================================================
+title **Diagrama de Secvență #1 — Autentificare cu JWT**
+
+skinparam sequence {
+  ArrowColor #636E72
+  ActorBorderColor #2D3436
+  LifeLineBorderColor #636E72
+  LifeLineBackgroundColor #F8F9FA
+  ParticipantBorderColor #2D3436
+  ParticipantBackgroundColor #74B9FF
+  BoxBorderColor #2D3436
+}
+skinparam note {
+  BackgroundColor #FFEAA7
+  BorderColor #2D3436
+}
+
+actor "Membru /\nAdministrator" as User #74B9FF
+participant "Frontend\n(React SPA)" as FE #DFE6E9
+participant "AuthController\n(/api/auth)" as AC #A29BFE
+participant "AuthService" as AS #00CEC9
+participant "UserRepository" as UR #FDCB6E
+database "PostgreSQL\n(users)" as DB #E17055
+
+== Scenariu Principal: Autentificare Reușită ==
+
+User -> FE : Accesează /login
+activate FE
+FE --> User : Afișează formular\n(email, parolă)
+deactivate FE
+
+User -> FE : Completează email + parolă\nApasă „Autentificare"
+activate FE
+
+FE -> FE : Validare locală\n(format email, câmpuri nevide)
+
+alt #FFE6E6 Validare locală eșuată
+  FE --> User : Afișează erori de validare\n(„Email invalid", „Parolă obligatorie")
+else #E6FFE6 Validare OK
+  FE -> AC : **POST /api/auth/login**\n{ email, password }
+  activate AC
+
+  AC -> AS : authenticate(email, password)
+  activate AS
+
+  AS -> UR : findByEmail(email)
+  activate UR
+
+  UR -> DB : SELECT id, email, hashed_password,\nrole, is_active, is_locked,\nlogin_attempts\nFROM users WHERE email = ?
+  activate DB
+  DB --> UR : User record (sau null)
+  deactivate DB
+
+  UR --> AS : User entity (sau null)
+  deactivate UR
+
+  alt #FFE6E6 Utilizator inexistent
+    AS --> AC : throw UserNotFoundException
+    AC --> FE : **401 Unauthorized**\n{ error: "Email sau parolă incorectă" }
+    FE --> User : Mesaj generic de eroare
+    note right of FE
+      Nu se dezvăluie dacă
+      emailul este înregistrat
+      (prevenire enumerare)
+    end note
+
+  else #FFE6E6 Cont blocat (is_locked = true)
+    AS --> AC : throw AccountLockedException
+    AC --> FE : **423 Locked**\n{ error: "Cont blocat.\nContactați administratorul." }
+    FE --> User : Mesaj cont blocat
+
+  else #FFE6E6 Parolă incorectă
+    AS -> AS : bcrypt.verify(password, hashed_password)\n→ **false**
+
+    AS -> UR : incrementLoginAttempts(userId)
+    activate UR
+    UR -> DB : UPDATE users SET\nlogin_attempts = login_attempts + 1\nWHERE id = ?
+    activate DB
+    DB --> UR : OK
+    deactivate DB
+    UR --> AS : updatedAttempts
+    deactivate UR
+
+    alt #FFCCCC login_attempts >= 5
+      AS -> UR : lockAccount(userId)
+      activate UR
+      UR -> DB : UPDATE users SET\nis_locked = true WHERE id = ?
+      activate DB
+      DB --> UR : OK
+      deactivate DB
+      UR --> AS : OK
+      deactivate UR
+
+      AS --> AC : throw AccountLockedException\n("Cont blocat după 5 încercări")
+      AC --> FE : **423 Locked**\n{ error: "Cont blocat după\n5 încercări eșuate." }
+      FE --> User : Mesaj blocare cont
+    else login_attempts < 5
+      AS --> AC : throw InvalidCredentialsException
+      AC --> FE : **401 Unauthorized**\n{ error: "Email sau parolă incorectă",\nremaining_attempts: X }
+      FE --> User : Mesaj eroare +\nîncercări rămase
+    end
+
+  else #E6FFE6 Parolă corectă ✅
+    AS -> AS : bcrypt.verify(password, hashed_password)\n→ **true**
+
+    AS -> UR : resetLoginAttempts(userId)
+    activate UR
+    UR -> DB : UPDATE users SET\nlogin_attempts = 0 WHERE id = ?
+    activate DB
+    DB --> UR : OK
+    deactivate DB
+    UR --> AS : OK
+    deactivate UR
+
+    AS -> AS : Generează JWT Token\n{ sub: userId, role: "member"|"admin",\niat: now, exp: now + 30min }
+
+    note right of AS
+      Token JWT conține:
+      • sub (user ID)
+      • role (admin / member)
+      • iat (issued at)
+      • exp (expiră în 30 min)
+      Semnat cu SECRET_KEY (HS256)
+    end note
+
+    AS --> AC : AuthResponse\n{ token, role, expiresIn }
+    deactivate AS
+
+    AC --> FE : **200 OK**\n{ token: "eyJhbG...",\nrole: "member",\nexpiresIn: 1800 }
+    deactivate AC
+
+    FE -> FE : Stochează JWT\nîn localStorage
+
+    alt Rol = admin
+      FE --> User : Redirect → /admin/dashboard
+    else Rol = member
+      FE --> User : Redirect → /member/dashboard
+    end
+  end
+end
+deactivate FE
+
+== Cereri Ulterioare (cu JWT) ==
+
+User -> FE : Accesează o pagină protejată
+activate FE
+FE -> AC : **GET /api/protected-resource**\nHeader: Authorization: Bearer <JWT>
+activate AC
+AC -> AS : validateToken(jwt)
+activate AS
+
+alt Token valid
+  AS --> AC : DecodedToken { userId, role }
+  deactivate AS
+  AC --> FE : **200 OK** + date
+  deactivate AC
+  FE --> User : Afișează conținutul
+else Token expirat / invalid
+  AS --> AC : throw TokenExpiredException
+  AC --> FE : **401 Unauthorized**\n{ error: "Sesiune expirată" }
+  FE -> FE : Șterge JWT din localStorage
+  FE --> User : Redirect → /login\n„Sesiunea a expirat"
+end
+deactivate FE
+
+@enduml

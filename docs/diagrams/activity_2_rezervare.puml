@@ -1,0 +1,133 @@
+@startuml Activity_Rezervare
+' ============================================================
+' ACTIVITY DIAGRAM #2 — Rezervare Loc la Clasă
+' REQ-6, REQ-10, REQ-11
+' ============================================================
+title **Diagrama de Activitate #2 — Rezervare Loc la Clasă**
+
+skinparam activity {
+  BackgroundColor #FFEAA7
+  BorderColor #2D3436
+  DiamondBackgroundColor #DFE6E9
+  DiamondBorderColor #2D3436
+  ArrowColor #636E72
+}
+
+|#E8F8F5| Membru |
+|#EBF5FB| Frontend (UI) |
+|#FEF9E7| Backend (API) |
+|#FDEDEC| Baza de Date |
+
+|Membru|
+start
+:Accesează secțiunea\n**„Clase disponibile"**;
+
+|Frontend (UI)|
+:Trimite GET /api/classes?available=true;
+
+|Backend (API)|
+:Interogează clasele viitoare\ncu locuri disponibile;
+
+|Baza de Date|
+:SELECT c.*, t.first_name, f.name\nFROM classes c\nJOIN trainers t ON c.trainer_id = t.id\nJOIN facilities f ON c.facility_id = f.id\nWHERE c.start_time > NOW()\nAND c.current_bookings < c.capacity;
+
+|Backend (API)|
+:Returnează lista de clase;
+
+|Frontend (UI)|
+:Afișează lista de clase\n(nume, antrenor, oră, sală,\nlocuri disponibile);
+
+|Membru|
+:Selectează clasa dorită;
+:Apasă butonul **„Rezervă"**;
+
+|Frontend (UI)|
+:Trimite POST /api/reservations\n{ class_id, member_id };
+
+|Backend (API)|
+:==Verificare #1: Abonament Activ==;
+
+|Baza de Date|
+:SELECT * FROM subscriptions\nWHERE member_id = ?\nAND status = 'active'\nAND end_date >= NOW();
+
+|Backend (API)|
+if (Are abonament activ?) then ([Da])
+
+  :==Verificare #2: Nu este restricționat==;
+
+  |Baza de Date|
+  :SELECT * FROM restricted_clients\nWHERE member_id = ?;
+
+  |Backend (API)|
+  if (Este în lista restricționați?) then ([Da — Restricționat])
+
+    |Frontend (UI)|
+    :Afișează eroare:\n**„Contul dvs. este restricționat.\nReînnoiți abonamentul."**;
+    stop
+
+  else ([Nu — Cont valid])
+
+    :==Verificare #3: Locuri Disponibile==;
+
+    |Baza de Date|
+    :SELECT COUNT(*) FROM reservations\nWHERE class_id = ?\nAND status = 'confirmed';
+
+    |Backend (API)|
+    if (Locuri disponibile?) then ([Da — Există locuri])
+
+      :==Verificare #4: Rezervare duplicat==;
+
+      |Baza de Date|
+      :SELECT * FROM reservations\nWHERE member_id = ?\nAND class_id = ?\nAND status = 'confirmed';
+
+      |Backend (API)|
+      if (Rezervare existentă?) then ([Da — Deja rezervat])
+
+        |Frontend (UI)|
+        :Afișează avertisment:\n**„Aveți deja o rezervare\npentru această clasă."**;
+        stop
+
+      else ([Nu — Rezervare nouă])
+
+        :Creează rezervarea;
+
+        |Baza de Date|
+        :INSERT INTO reservations\n(member_id, class_id, reserved_at,\nstatus) VALUES (?, ?, NOW(),\n'confirmed');
+
+        :UPDATE classes SET\ncurrent_bookings = current_bookings + 1\nWHERE id = ?;
+
+        |Backend (API)|
+        :Returnează confirmare\n(201 Created);
+
+        |Frontend (UI)|
+        :Afișează mesaj succes:\n**„Rezervare confirmată!\nClasa: X | Data: Y | Sala: Z"**;
+
+        |Membru|
+        :Vizualizează confirmarea;
+        stop
+
+      endif
+
+    else ([Nu — Clasă plină])
+
+      |Frontend (UI)|
+      :Afișează eroare:\n**„Nu mai sunt locuri\ndisponibile la această clasă."**;
+      stop
+
+    endif
+  endif
+
+else ([Nu — Fără abonament activ])
+
+  |Frontend (UI)|
+  :Afișează eroare:\n**„Nu aveți un abonament activ.\nAchiziționați un abonament\npentru a face rezervări."**;
+
+  :Afișează buton:\n**„Achiziționează Abonament →"**;
+
+  |Membru|
+  :Decide dacă achiziționează\nabonament;
+  stop
+
+endif
+
+@enduml

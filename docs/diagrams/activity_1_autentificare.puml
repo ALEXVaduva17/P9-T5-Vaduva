@@ -1,0 +1,133 @@
+@startuml Activity_Autentificare
+' ============================================================
+' ACTIVITY DIAGRAM #1 — Procesul de Autentificare
+' REQ-1, REQ-2, REQ-3
+' ============================================================
+title **Diagrama de Activitate #1 — Procesul de Autentificare**
+
+skinparam activity {
+  BackgroundColor #FFEAA7
+  BorderColor #2D3436
+  DiamondBackgroundColor #DFE6E9
+  DiamondBorderColor #2D3436
+  ArrowColor #636E72
+}
+skinparam swimlane {
+  BorderColor #2D3436
+}
+
+|#E8F8F5| Utilizator |
+|#EBF5FB| Frontend (UI) |
+|#FEF9E7| Backend (API) |
+|#FDEDEC| Baza de Date |
+
+|Utilizator|
+start
+:Accesează pagina de login;
+
+|Frontend (UI)|
+:Afișează formularul de autentificare\n(câmpuri: email, parolă);
+
+|Utilizator|
+:Introduce email și parolă;
+:Apasă butonul **„Autentificare"**;
+
+|Frontend (UI)|
+:Validează câmpurile local\n(format email, parolă nevid);
+
+if (Validare locală OK?) then ([Da])
+
+  |Backend (API)|
+  :Primește cerere POST /api/auth/login\n(email, parolă);
+  :Caută utilizatorul după email;
+
+  |Baza de Date|
+  :SELECT * FROM users\nWHERE email = ?;
+
+  |Backend (API)|
+  if (Utilizator există?) then ([Da])
+
+    :Verifică dacă contul este blocat\n(login_attempts >= 5);
+
+    if (Cont blocat?) then ([Da])
+      |Frontend (UI)|
+      :Afișează mesaj:\n**„Cont blocat. Contactați\nadministratorul."**;
+      stop
+    else ([Nu])
+
+      |Backend (API)|
+      :Compară hash-ul parolei\n(bcrypt.verify);
+
+      if (Parolă corectă?) then ([Da])
+
+        :Resetează contor încercări eșuate\n(login_attempts = 0);
+
+        |Baza de Date|
+        :UPDATE users SET\nlogin_attempts = 0\nWHERE id = ?;
+
+        |Backend (API)|
+        :Generează token JWT\n(rol, user_id, expirare 30 min);
+        :Determină rolul utilizatorului\n(Administrator / Membru);
+
+        |Frontend (UI)|
+        :Stochează JWT în localStorage;
+
+        if (Rol = Administrator?) then ([Da])
+          :Redirecționează la\n**Dashboard Admin**;
+        else ([Membru])
+          :Redirecționează la\n**Dashboard Membru**;
+        endif
+
+        |Utilizator|
+        :Vede pagina principală\nconform rolului;
+        stop
+
+      else ([Parolă greșită])
+
+        |Backend (API)|
+        :Incrementează contor\nîncercări eșuate (+1);
+
+        |Baza de Date|
+        :UPDATE users SET\nlogin_attempts = login_attempts + 1\nWHERE id = ?;
+
+        |Backend (API)|
+        if (login_attempts >= 5?) then ([Da])
+          :Blochează contul\n(is_locked = true);
+
+          |Baza de Date|
+          :UPDATE users SET\nis_locked = true\nWHERE id = ?;
+
+          |Frontend (UI)|
+          :Afișează mesaj:\n**„Cont blocat după 5\nîncercări eșuate."**;
+          stop
+
+        else ([Nu, mai are încercări])
+
+          |Frontend (UI)|
+          :Afișează mesaj:\n**„Email sau parolă incorectă.\nÎncercări rămase: X"**;
+
+          |Utilizator|
+          :Decide dacă reîncearcă;
+          stop
+
+        endif
+      endif
+    endif
+
+  else ([Utilizator inexistent])
+    |Frontend (UI)|
+    :Afișează mesaj generic:\n**„Email sau parolă incorectă."**\n(fără a dezvălui dacă emailul există);
+    stop
+  endif
+
+else ([Nu — erori de validare])
+  |Frontend (UI)|
+  :Afișează erori de validare\n(ex: „Email invalid");
+
+  |Utilizator|
+  :Corectează datele;
+  stop
+
+endif
+
+@enduml

@@ -1,0 +1,151 @@
+@startuml Activity_PlataAbonament
+' ============================================================
+' ACTIVITY DIAGRAM #3 — Plata Online a unui Abonament
+' REQ-7, REQ-8, REQ-16
+' ============================================================
+title **Diagrama de Activitate #3 — Plata Online a unui Abonament**
+
+skinparam activity {
+  BackgroundColor #FFEAA7
+  BorderColor #2D3436
+  DiamondBackgroundColor #DFE6E9
+  DiamondBorderColor #2D3436
+  ArrowColor #636E72
+}
+
+|#E8F8F5| Membru |
+|#EBF5FB| Frontend (UI) |
+|#FEF9E7| Backend (API) |
+|#FDEDEC| Baza de Date |
+|#F5EEF8| Payment Gateway |
+|#FEF9E7| Serviciu Email |
+
+|Membru|
+start
+:Accesează secțiunea\n**„Abonamente"**;
+
+|Frontend (UI)|
+:Afișează tipurile de abonament\ndisponibile (standard,\npersonalizat, etc.);
+
+|Membru|
+:Selectează tipul de abonament;
+
+|Frontend (UI)|
+if (Tip = Personalizat?) then ([Da])
+
+  :Afișează formular suplimentar:\n**Nr. ședințe personal training**;
+
+  |Membru|
+  :Introduce numărul de ședințe PT;
+
+  |Frontend (UI)|
+  :Trimite POST /api/subscriptions/calculate\n{ type: 'personalized', pt_sessions: N };
+
+  |Backend (API)|
+  :Calculează suma:\n**Sumă = Taxă bază +\n(Nr. ședințe PT × 50 RON)**;
+  :Returnează suma calculată;
+
+  |Frontend (UI)|
+  :Afișează sumar:\n**Taxă bază: X RON\nȘedințe PT: N × 50 RON\nTotal: Y RON**;
+
+else ([Nu — Standard])
+
+  |Frontend (UI)|
+  :Afișează prețul standard\nal abonamentului selectat;
+
+endif
+
+|Membru|
+:Verifică sumarul;
+:Apasă **„Plătește Online"**;
+
+|Frontend (UI)|
+:Trimite POST /api/payments/initiate\n{ subscription_type, amount, member_id };
+
+|Backend (API)|
+:Creează abonamentul cu status\n**'pending_payment'**;
+
+|Baza de Date|
+:INSERT INTO subscriptions\n(member_id, type, base_fee,\npt_sessions, total_amount,\nstart_date, end_date, status)\nVALUES (?, ?, ?, ?, ?, ?, ?,\n'pending_payment');
+
+|Backend (API)|
+:Creează sesiune de plată\ncu gateway-ul extern;
+
+|Payment Gateway|
+:Primește cerere de creare\nsesiune (amount, currency: RON,\ncallback_url);
+:Returnează **payment_url**\n+ **session_id**;
+
+|Frontend (UI)|
+:Redirecționează membrul la\npagina de plată a gateway-ului;
+
+|Payment Gateway|
+:Afișează formularul de plată\n(card, date, CVV);
+
+|Membru|
+:Introduce datele cardului;
+:Confirmă plata;
+
+|Payment Gateway|
+:Procesează tranzacția;
+
+if (Plata reușită?) then ([Da ✅])
+
+  :Trimite webhook/callback la\nBackend: payment.succeeded\n{ session_id, amount, reference };
+
+  |Backend (API)|
+  :Actualizează abonamentul\nla status **'active'**;
+
+  |Baza de Date|
+  :UPDATE subscriptions SET\nstatus = 'active'\nWHERE id = ?;
+
+  :INSERT INTO payments\n(subscription_id, amount,\ncurrency, gateway_reference,\npaid_at)\nVALUES (?, ?, 'RON', ?, NOW());
+
+  |Backend (API)|
+  :Verifică dacă membrul era\nîn restricted_clients;
+
+  |Baza de Date|
+  :DELETE FROM restricted_clients\nWHERE member_id = ?;
+
+  |Backend (API)|
+  fork
+    :Actualizează subscription_status\nal membrului la 'active';
+
+    |Baza de Date|
+    :UPDATE members SET\nsubscription_status = 'active'\nWHERE id = ?;
+  fork again
+    |Serviciu Email|
+    :Trimite email confirmare:\n**„Plată confirmată!\nAbonament activat."**\n+ detalii plată;
+  end fork
+
+  |Frontend (UI)|
+  :Redirecționează la pagina\nde succes;
+  :Afișează mesaj:\n**„Plata a fost procesată cu succes!\nAbonamentul dvs. este acum activ."**;
+
+  |Membru|
+  :Vede confirmarea plății\nși abonamentul activat;
+  stop
+
+else ([Nu ❌ — Plată eșuată])
+
+  |Payment Gateway|
+  :Trimite webhook/callback:\npayment.failed\n{ session_id, error_reason };
+
+  |Backend (API)|
+  :Marchează abonamentul ca\n**'payment_failed'**;
+
+  |Baza de Date|
+  :UPDATE subscriptions SET\nstatus = 'payment_failed'\nWHERE id = ?;
+
+  |Frontend (UI)|
+  :Redirecționează la pagina\nde eroare;
+  :Afișează mesaj:\n**„Plata nu a putut fi procesată.\nVă rugăm să reîncercați."**;
+
+  :Afișează buton:\n**„Reîncearcă Plata →"**;
+
+  |Membru|
+  :Decide dacă reîncearcă;
+  stop
+
+endif
+
+@enduml

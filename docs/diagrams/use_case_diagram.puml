@@ -1,0 +1,147 @@
+@startuml UseCase_FitnessCenter
+' ============================================================
+' USE-CASE DIAGRAM - Sistem Informatic Distribuit
+' pentru Gestionarea unei Sali de Fitness
+' ============================================================
+left to right direction
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor<<high>> #FFEAA7
+  BackgroundColor<<medium>> #DFE6E9
+  BorderColor #2D3436
+  ArrowColor #636E72
+}
+
+' ── ACTORI ──
+actor "Membru\n(Client)" as Membru #74B9FF
+actor "Administrator" as Admin #E17055
+actor "Sistem Automat\n(Cron Job)" as Cron #A29BFE
+actor "Payment Gateway\n(Stripe/PayU)" as PG #00CEC9
+actor "Serviciu Email\n(SMTP)" as Email #FDCB6E
+
+' ── GRANIȚA SISTEMULUI ──
+rectangle "Sistem Informatic - Fitness Center" {
+
+  ' ── UC: AUTENTIFICARE ȘI ACCES ──
+  usecase "UC-1\nAutentificare" as UC1 <<high>>
+  usecase "UC-2\nBlocare cont după\n5 încercări eșuate" as UC2 <<high>>
+  usecase "UC-3\nDeconectare\n(Logout)" as UC3 <<high>>
+
+  ' ── UC: GESTIUNE MEMBRI ──
+  usecase "UC-4\nAdăugare Membru" as UC4 <<high>>
+  usecase "UC-5\nEditare Membru" as UC5 <<high>>
+  usecase "UC-6\nVizualizare\nLista Membri" as UC6 <<high>>
+
+  ' ── UC: ABONAMENTE ──
+  usecase "UC-7\nVizualizare\nAbonament Curent" as UC7 <<high>>
+  usecase "UC-8\nCreare Abonament\nPersonalizat" as UC8 <<high>>
+  usecase "UC-9\nCalculare Sumă\nAbonament Personalizat" as UC9 <<high>>
+  usecase "UC-10\nModificare Prețuri\nAbonamente" as UC10 <<high>>
+
+  ' ── UC: PLĂȚI ──
+  usecase "UC-11\nPlată Online\nAbonament" as UC11 <<high>>
+  usecase "UC-12\nProcesare Plată\n(Gateway)" as UC12 <<high>>
+  usecase "UC-13\nVizualizare Istoric\nPlăți Personale" as UC13 <<high>>
+
+  ' ── UC: REZERVĂRI ──
+  usecase "UC-14\nRezervare Loc\nla Clasă" as UC14 <<medium>>
+  usecase "UC-15\nAnulare Rezervare" as UC15 <<medium>>
+  usecase "UC-16\nVizualizare\nRezervări Proprii" as UC16 <<medium>>
+  usecase "UC-17\nVerificare\nAbonament Activ" as UC17 <<medium>>
+  usecase "UC-18\nVerificare\nDisponibilitate Locuri" as UC18 <<medium>>
+
+  ' ── UC: ANTRENORI & SĂLI ──
+  usecase "UC-19\nGestionare Program\nAntrenori" as UC19 <<medium>>
+  usecase "UC-20\nGestionare\nSăli/Facilități" as UC20 <<medium>>
+  usecase "UC-21\nGestionare Clase\n(Ședințe Antrenament)" as UC21 <<medium>>
+
+  ' ── UC: ECHIPAMENTE ──
+  usecase "UC-22\nGestionare Inventar\nEchipamente" as UC22 <<medium>>
+
+  ' ── UC: RAPOARTE ──
+  usecase "UC-23\nGenerare Raport\nSume Încasate" as UC23 <<medium>>
+  usecase "UC-24\nGenerare Raport\nGrad Ocupare Săli" as UC24 <<medium>>
+
+  ' ── UC: PROCESE AUTOMATE ──
+  usecase "UC-25\nVerificare Expirare\nAbonamente" as UC25 <<high>>
+  usecase "UC-26\nMutare Membru în\nClienți Restricționați" as UC26 <<high>>
+  usecase "UC-27\nTrimitere Notificare\nExpirare" as UC27 <<medium>>
+}
+
+' ══════════════════════════════════
+' ASOCIERI DIRECTE (Actor → Use Case)
+' ══════════════════════════════════
+
+' -- Membru --
+Membru --> UC1
+Membru --> UC3
+Membru --> UC7
+Membru --> UC8
+Membru --> UC11
+Membru --> UC13
+Membru --> UC14
+Membru --> UC15
+Membru --> UC16
+
+' -- Administrator --
+Admin --> UC1
+Admin --> UC3
+Admin --> UC4
+Admin --> UC5
+Admin --> UC6
+Admin --> UC8
+Admin --> UC10
+Admin --> UC19
+Admin --> UC20
+Admin --> UC21
+Admin --> UC22
+Admin --> UC23
+Admin --> UC24
+
+' -- Sistem Automat (Cron Job) --
+Cron --> UC25
+
+' -- Payment Gateway (actor secundar) --
+PG --> UC12
+
+' -- Serviciu Email (actor secundar) --
+Email --> UC27
+
+' ══════════════════════════════════
+' RELAȚII <<include>>
+' ══════════════════════════════════
+
+UC1 ..> UC2 : <<extend>>\n[după 5 încercări eșuate]
+
+UC11 ..> UC12 : <<include>>
+UC12 ..> Email : <<include>>\n[confirmare plată]
+
+UC8 ..> UC9 : <<include>>
+
+UC14 ..> UC17 : <<include>>
+UC14 ..> UC18 : <<include>>
+
+UC25 ..> UC26 : <<include>>
+UC26 ..> UC27 : <<extend>>\n[notificare opțională]
+
+' ══════════════════════════════════
+' NOTE
+' ══════════════════════════════════
+note right of UC9
+  Formula:
+  Sumă = Taxă bază +
+  (Nr. ședințe PT × 50 RON)
+end note
+
+note right of UC17
+  Membru restricționat
+  NU poate face rezervări
+end note
+
+note bottom of UC25
+  Proces automat periodic
+  (zilnic / cron job)
+end note
+
+@enduml

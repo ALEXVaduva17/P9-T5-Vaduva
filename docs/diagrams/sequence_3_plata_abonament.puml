@@ -1,0 +1,267 @@
+@startuml Sequence_PlataAbonament
+' ============================================================
+' SEQUENCE DIAGRAM #3 — Procesarea Plății unui Abonament
+' REQ-7, REQ-8, REQ-16
+' ============================================================
+title **Diagrama de Secvență #3 — Procesare Plată Abonament**
+
+skinparam sequence {
+  ArrowColor #636E72
+  ActorBorderColor #2D3436
+  LifeLineBorderColor #636E72
+  LifeLineBackgroundColor #F8F9FA
+  ParticipantBorderColor #2D3436
+  ParticipantBackgroundColor #74B9FF
+  BoxBorderColor #2D3436
+}
+skinparam note {
+  BackgroundColor #FFEAA7
+  BorderColor #2D3436
+}
+
+actor "Membru" as User #74B9FF
+participant "Frontend\n(React SPA)" as FE #DFE6E9
+participant "SubscriptionController\n(/api/subscriptions)" as SC #A29BFE
+participant "PaymentController\n(/api/payments)" as PC #A29BFE
+participant "SubscriptionService" as SS #00CEC9
+participant "PaymentService" as PS #00CEC9
+participant "SubscriptionRepository" as SR #FDCB6E
+participant "PaymentRepository" as PR #FDCB6E
+database "PostgreSQL" as DB #E17055
+participant "Payment Gateway\n(Stripe/PayU)" as GW #E17055
+participant "Serviciu Email\n(SMTP)" as EM #FDCB6E
+
+== Faza 1: Selectare și Calcul Preț Abonament ==
+
+User -> FE : Accesează /subscriptions/new
+activate FE
+
+FE -> SC : **GET /api/subscriptions/types**\nHeader: Authorization: Bearer <JWT>
+activate SC
+
+SC -> SS : getAvailableTypes()
+activate SS
+SS -> DB : SELECT * FROM subscription_types\nWHERE is_active = true
+activate DB
+DB --> SS : Lista tipuri abonament
+deactivate DB
+SS --> SC : List<SubscriptionTypeDTO>
+deactivate SS
+
+SC --> FE : **200 OK**\n[ { id: 1, name: "Standard",\nbase_fee: 150 },\n{ id: 2, name: "Personalizat",\nbase_fee: 200 } ]
+deactivate SC
+
+FE --> User : Afișează opțiuni abonament\n(carduri cu tip + preț bază)
+deactivate FE
+
+User -> FE : Selectează „Personalizat"\nIntroduce: 4 ședințe PT
+activate FE
+
+FE -> SC : **POST /api/subscriptions/calculate**\n{ type_id: 2, pt_sessions: 4 }
+activate SC
+
+SC -> SS : calculatePrice(typeId, ptSessions)
+activate SS
+
+SS -> SS : amount = base_fee + (pt_sessions × 50)\namount = 200 + (4 × 50) = **400 RON**
+
+note right of SS
+  **Formula REQ-8:**
+  Sumă = Taxă bază + (Nr. ședințe PT × 50 RON)
+  = 200 + (4 × 50) = 400 RON
+end note
+
+SS --> SC : PriceCalculationDTO\n{ base_fee: 200,\npt_sessions: 4,\npt_cost: 200,\ntotal: 400,\ncurrency: "RON" }
+deactivate SS
+
+SC --> FE : **200 OK**\n{ base_fee, pt_cost, total }
+deactivate SC
+
+FE --> User : Afișează sumar:\n┌─────────────────────┐\n│ Taxă bază:  200 RON │\n│ 4 × PT:     200 RON │\n│ ────────────────── │\n│ **TOTAL:    400 RON** │\n└─────────────────────┘\n[Plătește Online]
+deactivate FE
+
+== Faza 2: Inițiere Plată ==
+
+User -> FE : Apasă **„Plătește Online"**
+activate FE
+
+FE -> PC : **POST /api/payments/initiate**\n{ subscription_type_id: 2,\npt_sessions: 4 }\nHeader: Authorization: Bearer <JWT>
+activate PC
+
+PC -> PS : initiatePayment(memberId, typeId, ptSessions)
+activate PS
+
+' ── Creează abonamentul cu status pending ──
+PS -> SR : createPendingSubscription(...)
+activate SR
+SR -> DB : INSERT INTO subscriptions\n(member_id, type, base_fee,\npt_sessions, total_amount,\nstart_date, end_date, status)\nVALUES (?, 'personalized', 200,\n4, 400, CURRENT_DATE,\nCURRENT_DATE + INTERVAL '30 days',\n'pending_payment')\nRETURNING id
+activate DB
+DB --> SR : { id: 501 }
+deactivate DB
+SR --> PS : subscriptionId = 501
+deactivate SR
+
+' ── Creează sesiune de plată la gateway ──
+PS -> GW : **POST /v1/checkout/sessions**\n{ amount: 40000,  // cents\ncurrency: "ron",\nsuccess_url: ".../success?sid=501",\ncancel_url: ".../cancel?sid=501",\nmetadata: { subscription_id: 501 },\nwebhook_url: ".../api/payments/webhook" }
+activate GW
+
+GW --> PS : { session_id: "cs_live_abc123",\npayment_url: "https://checkout.\nstripe.com/pay/cs_live_abc123" }
+deactivate GW
+
+PS -> PR : savePaymentIntent(...)
+activate PR
+PR -> DB : INSERT INTO payments\n(subscription_id, amount, currency,\ngateway_session_id, status)\nVALUES (501, 400, 'RON',\n'cs_live_abc123', 'pending')
+activate DB
+DB --> PR : OK
+deactivate DB
+PR --> PS : OK
+deactivate PR
+
+PS --> PC : PaymentInitDTO\n{ payment_url, session_id }
+deactivate PS
+
+PC --> FE : **200 OK**\n{ payment_url:\n"https://checkout.stripe.com/..." }
+deactivate PC
+
+FE --> User : Redirecționează la\npagina de plată Stripe
+deactivate FE
+
+== Faza 3: Procesare Plată (Gateway Extern) ==
+
+User -> GW : Completează datele cardului\nApasă „Plătește 400 RON"
+activate GW
+
+GW -> GW : Procesează tranzacția\n(verificare card, 3D Secure, etc.)
+
+alt #E6FFE6 Plata REUȘITĂ ✅
+
+  GW --> User : Redirecționează la\nsuccess_url
+
+  GW ->> PC : **POST /api/payments/webhook**\n(async)\n{ event: "payment_intent.succeeded",\ndata: {\n  session_id: "cs_live_abc123",\n  amount: 40000,\n  gateway_reference: "pi_xyz789"\n}}
+  deactivate GW
+  activate PC
+
+  note over PC, PS
+    **Webhook Processing (async)**
+    Gateway-ul trimite evenimentul
+    independent de redirect-ul userului.
+  end note
+
+  PC -> PS : handlePaymentSuccess(webhookData)
+  activate PS
+
+  ' ── Verificare semnătură webhook ──
+  PS -> PS : Verifică semnătura webhook\n(Stripe-Signature header)
+
+  ' ── Actualizare abonament → active ──
+  PS -> SR : activateSubscription(subscriptionId)
+  activate SR
+  SR -> DB : UPDATE subscriptions SET\nstatus = 'active'\nWHERE id = 501
+  activate DB
+  DB --> SR : OK
+  deactivate DB
+  SR --> PS : OK
+  deactivate SR
+
+  ' ── Înregistrare plată ──
+  PS -> PR : confirmPayment(sessionId, reference)
+  activate PR
+  PR -> DB : UPDATE payments SET\nstatus = 'completed',\ngateway_reference = 'pi_xyz789',\npaid_at = NOW()\nWHERE gateway_session_id = 'cs_live_abc123'
+  activate DB
+  DB --> PR : OK
+  deactivate DB
+  PR --> PS : OK
+  deactivate PR
+
+  ' ── Scoatere din restricted_clients (dacă e cazul) ──
+  PS -> DB : DELETE FROM restricted_clients\nWHERE member_id = ?
+  activate DB
+  DB --> PS : affected_rows (0 sau 1)
+  deactivate DB
+
+  ' ── Actualizare status membru ──
+  PS -> DB : UPDATE members SET\nsubscription_status = 'active'\nWHERE id = ?
+  activate DB
+  DB --> PS : OK
+  deactivate DB
+
+  ' ── Trimitere email confirmare (async) ──
+  PS ->> EM : sendPaymentConfirmation(\nmemberEmail, paymentDetails)
+  activate EM
+  note right of EM
+    **Email trimis:**
+    Subiect: „Plată confirmată"
+    Conținut:
+    • Abonament: Personalizat
+    • Sumă: 400 RON
+    • Valabil: 11.05 - 10.06.2026
+    • Nr. referință: pi_xyz789
+  end note
+  EM --> PS : OK (async)
+  deactivate EM
+
+  PS --> PC : **200 OK** (webhook acknowledged)
+  deactivate PS
+  deactivate PC
+
+  |||
+
+  User -> FE : Pagina success_url se încarcă
+  activate FE
+  FE -> SC : **GET /api/subscriptions/current**\nHeader: Authorization: Bearer <JWT>
+  activate SC
+  SC -> SS : getCurrentSubscription(memberId)
+  activate SS
+  SS -> DB : SELECT * FROM subscriptions\nWHERE member_id = ?\nAND status = 'active'
+  activate DB
+  DB --> SS : SubscriptionEntity (active)
+  deactivate DB
+  SS --> SC : SubscriptionDTO
+  deactivate SS
+  SC --> FE : **200 OK**\n{ type: "Personalizat",\nstatus: "active",\nstart: "11.05.2026",\nend: "10.06.2026",\ntotal: 400 }
+  deactivate SC
+
+  FE --> User : ✅ „Plata a fost procesată\ncu succes!\nAbonamentul dvs. este activ\npână la 10.06.2026."
+  deactivate FE
+
+else #FFE6E6 Plata EȘUATĂ ❌
+
+  GW --> User : Redirecționează la\ncancel_url
+  deactivate GW
+
+  GW ->> PC : **POST /api/payments/webhook**\n(async)\n{ event: "payment_intent.failed",\ndata: {\n  session_id: "cs_live_abc123",\n  error: "card_declined"\n}}
+  activate PC
+
+  PC -> PS : handlePaymentFailure(webhookData)
+  activate PS
+
+  PS -> SR : failSubscription(subscriptionId)
+  activate SR
+  SR -> DB : UPDATE subscriptions SET\nstatus = 'payment_failed'\nWHERE id = 501
+  activate DB
+  DB --> SR : OK
+  deactivate DB
+  SR --> PS : OK
+  deactivate SR
+
+  PS -> PR : failPayment(sessionId)
+  activate PR
+  PR -> DB : UPDATE payments SET\nstatus = 'failed'\nWHERE gateway_session_id = 'cs_live_abc123'
+  activate DB
+  DB --> PR : OK
+  deactivate DB
+  PR --> PS : OK
+  deactivate PR
+
+  PS --> PC : **200 OK**
+  deactivate PS
+  deactivate PC
+
+  User -> FE : Pagina cancel_url se încarcă
+  activate FE
+  FE --> User : ❌ „Plata nu a putut fi procesată.\nVă rugăm să reîncercați."\n[Reîncearcă Plata →]
+  deactivate FE
+
+end
+
+@enduml

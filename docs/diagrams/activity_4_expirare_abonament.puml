@@ -1,0 +1,93 @@
+@startuml Activity_ExpirareAbonament
+' ============================================================
+' ACTIVITY DIAGRAM #4 — Expirare Abonament și Restricționare
+' REQ-6 (Proces Automat — Cron Job)
+' ============================================================
+title **Diagrama de Activitate #4 — Expirare Abonament și Restricționare Cont**
+
+skinparam activity {
+  BackgroundColor #FFEAA7
+  BorderColor #2D3436
+  DiamondBackgroundColor #DFE6E9
+  DiamondBorderColor #2D3436
+  ArrowColor #636E72
+}
+
+|#F5EEF8| Sistem Automat (Cron Job) |
+|#FEF9E7| Backend (Service Layer) |
+|#FDEDEC| Baza de Date |
+|#FEF9E7| Serviciu Email |
+
+|Sistem Automat (Cron Job)|
+start
+:Cron Job se declanșează\n**zilnic la 00:05**;
+
+|Backend (Service Layer)|
+:Inițiază procesul de verificare\nabonamente expirate;
+
+:Interogează abonamentele\nactive cu data expirare < azi;
+
+|Baza de Date|
+:SELECT s.id, s.member_id,\nm.first_name, m.last_name,\nu.email\nFROM subscriptions s\nJOIN members m ON s.member_id = m.id\nJOIN users u ON m.user_id = u.id\nWHERE s.status = 'active'\nAND s.end_date < CURRENT_DATE;
+
+|Backend (Service Layer)|
+:Primește lista membrilor\ncu abonamente expirate;
+
+if (Lista goală?) then ([Da — Nimeni expirat])
+  :Loghează: „Niciun abonament\nexpirat găsit.";
+  stop
+else ([Nu — Există abonamente expirate])
+endif
+
+:Începe iterarea prin fiecare\nmembru cu abonament expirat;
+
+while (Mai există membri de procesat?) is ([Da])
+
+  :Preia membrul curent\n(member_id, subscription_id);
+
+  :== Pasul 1: Actualizare status abonament ==;
+
+  |Baza de Date|
+  :UPDATE subscriptions SET\nstatus = 'expired'\nWHERE id = ?;
+
+  |Backend (Service Layer)|
+  :== Pasul 2: Mutare în restricted_clients ==;
+
+  |Baza de Date|
+  :INSERT INTO restricted_clients\n(member_id, subscription_id,\nrestricted_at, reason)\nVALUES (?, ?, NOW(),\n'subscription_expired');
+
+  |Backend (Service Layer)|
+  :== Pasul 3: Actualizare status membru ==;
+
+  |Baza de Date|
+  :UPDATE members SET\nsubscription_status = 'restricted'\nWHERE id = ?;
+
+  |Backend (Service Layer)|
+  :== Pasul 4: Anulare rezervări viitoare ==;
+
+  |Baza de Date|
+  :UPDATE reservations SET\nstatus = 'cancelled_expired'\nWHERE member_id = ?\nAND class_id IN (\n  SELECT id FROM classes\n  WHERE start_time > NOW()\n)\nAND status = 'confirmed';
+
+  |Backend (Service Layer)|
+  :== Pasul 5: Trimitere notificare ==;
+
+  |Serviciu Email|
+  :Trimite email către membru:\n**„Abonamentul dvs. a expirat."**\n\nConținut:\n• Data expirării\n• Rezervările anulate\n• Link reînnoire abonament;
+
+  |Backend (Service Layer)|
+  :Loghează acțiunea:\n**„Membrul #ID mutat în\nrestricted_clients"**;
+
+endwhile ([Nu — Toți procesați])
+
+|Backend (Service Layer)|
+:== Rezumat procesare ==;
+
+fork
+  :Loghează raportul final:\n**„Procesați: N membri.\nRestrucționați: N.\nRezervări anulate: M."**;
+fork again
+  :Trimite raport sumar la\nadministratori (opțional);
+end fork
+
+stop
+
+@enduml

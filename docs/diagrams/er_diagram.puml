@@ -1,0 +1,297 @@
+@startuml ER_Diagram_FitnessCenter
+' ============================================================
+' ER DIAGRAM (Physical Data Model)
+' Sistem Informatic Distribuit — Fitness Center
+' PostgreSQL — 3NF
+' ============================================================
+title **Diagrama Entity-Relationship — Fitness Center\n(Physical Data Model — PostgreSQL)**
+
+skinparam entity {
+  BackgroundColor #F8F9FA
+  BorderColor #2D3436
+  ArrowColor #636E72
+}
+skinparam note {
+  BackgroundColor #FFEAA7
+  BorderColor #2D3436
+}
+
+!define PK <color:#E17055><b>PK</b></color>
+!define FK <color:#0984E3><b>FK</b></color>
+!define NN <color:#636E72>NOT NULL</color>
+!define UQ <color:#6C5CE7><b>UNIQUE</b></color>
+!define DF <color:#00B894>DEFAULT</color>
+
+' ══════════════════════════════════
+' TABELE
+' ══════════════════════════════════
+
+entity "users" as users {
+  PK id : SERIAL
+  --
+  email : VARCHAR(255) NN UQ
+  hashed_password : VARCHAR(255) NN
+  role : VARCHAR(20) NN
+  is_active : BOOLEAN NN DF true
+  is_locked : BOOLEAN NN DF false
+  login_attempts : INTEGER NN DF 0
+  created_at : TIMESTAMP NN DF NOW()
+  updated_at : TIMESTAMP NN DF NOW()
+  --
+  CHECK (role IN ('admin', 'member'))
+  CHECK (login_attempts >= 0)
+  INDEX idx_users_email (email)
+  INDEX idx_users_role (role)
+}
+
+entity "members" as members {
+  PK id : SERIAL
+  --
+  FK user_id : INTEGER NN UQ
+  first_name : VARCHAR(100) NN
+  last_name : VARCHAR(100) NN
+  phone : VARCHAR(20) NN
+  subscription_status : VARCHAR(20) NN DF 'none'
+  created_at : TIMESTAMP NN DF NOW()
+  updated_at : TIMESTAMP NN DF NOW()
+  --
+  CHECK (subscription_status IN
+    ('none', 'active', 'restricted',
+     'expired'))
+  INDEX idx_members_user_id (user_id)
+  INDEX idx_members_status
+    (subscription_status)
+}
+
+entity "trainers" as trainers {
+  PK id : SERIAL
+  --
+  first_name : VARCHAR(100) NN
+  last_name : VARCHAR(100) NN
+  phone : VARCHAR(20) NN
+  specialization : VARCHAR(100)
+  is_active : BOOLEAN NN DF true
+  created_at : TIMESTAMP NN DF NOW()
+}
+
+note bottom of trainers
+  Antrenorii **nu au credențiale**
+  de acces la sistem.
+  Nu există FK către users.
+  (SRS v1.2, §2.3)
+end note
+
+entity "subscription_types" as sub_types {
+  PK id : SERIAL
+  --
+  name : VARCHAR(50) NN UQ
+  base_fee : NUMERIC(10,2) NN
+  duration_days : INTEGER NN DF 30
+  is_active : BOOLEAN NN DF true
+  created_at : TIMESTAMP NN DF NOW()
+  updated_at : TIMESTAMP NN DF NOW()
+  --
+  CHECK (base_fee > 0)
+  CHECK (duration_days > 0)
+}
+
+entity "subscriptions" as subscriptions {
+  PK id : SERIAL
+  --
+  FK member_id : INTEGER NN
+  FK type_id : INTEGER NN
+  type : VARCHAR(20) NN
+  base_fee : NUMERIC(10,2) NN
+  pt_sessions : INTEGER NN DF 0
+  total_amount : NUMERIC(10,2) NN
+  start_date : DATE NN
+  end_date : DATE NN
+  status : VARCHAR(20) NN DF 'pending_payment'
+  created_at : TIMESTAMP NN DF NOW()
+  --
+  CHECK (type IN ('standard',
+    'personalized'))
+  CHECK (base_fee >= 0)
+  CHECK (pt_sessions >= 0)
+  CHECK (total_amount >= 0)
+  CHECK (end_date > start_date)
+  CHECK (status IN ('active',
+    'pending_payment', 'payment_failed',
+    'expired', 'cancelled'))
+  INDEX idx_subscriptions_member
+    (member_id)
+  INDEX idx_subscriptions_status (status)
+  INDEX idx_subscriptions_end_date
+    (end_date)
+}
+
+note right of subscriptions
+  **Formula REQ-8:**
+  total_amount = base_fee
+    + (pt_sessions × 50)
+  ───────────────────
+  Un membru: 1 abonament
+  activ, N istorice.
+  **Indexul pe end_date**
+  optimizează Cron Job-ul
+  de expirare.
+end note
+
+entity "payments" as payments {
+  PK id : SERIAL
+  --
+  FK subscription_id : INTEGER NN
+  amount : NUMERIC(10,2) NN
+  currency : VARCHAR(3) NN DF 'RON'
+  gateway_session_id : VARCHAR(255)
+  gateway_reference : VARCHAR(255)
+  status : VARCHAR(20) NN DF 'pending'
+  paid_at : TIMESTAMP
+  created_at : TIMESTAMP NN DF NOW()
+  --
+  CHECK (amount > 0)
+  CHECK (status IN ('pending',
+    'completed', 'failed', 'refunded'))
+  INDEX idx_payments_subscription
+    (subscription_id)
+  INDEX idx_payments_gateway_session
+    (gateway_session_id)
+}
+
+entity "facilities" as facilities {
+  PK id : SERIAL
+  --
+  name : VARCHAR(100) NN UQ
+  capacity : INTEGER NN
+  description : TEXT
+  is_active : BOOLEAN NN DF true
+  created_at : TIMESTAMP NN DF NOW()
+  --
+  CHECK (capacity > 0)
+}
+
+entity "classes" as classes {
+  PK id : SERIAL
+  --
+  FK trainer_id : INTEGER NN
+  FK facility_id : INTEGER NN
+  name : VARCHAR(100) NN
+  description : TEXT
+  start_time : TIMESTAMP NN
+  end_time : TIMESTAMP NN
+  capacity : INTEGER NN
+  created_at : TIMESTAMP NN DF NOW()
+  --
+  CHECK (capacity > 0)
+  CHECK (end_time > start_time)
+  INDEX idx_classes_trainer (trainer_id)
+  INDEX idx_classes_facility (facility_id)
+  INDEX idx_classes_start_time (start_time)
+}
+
+entity "reservations" as reservations {
+  PK id : SERIAL
+  --
+  FK member_id : INTEGER NN
+  FK class_id : INTEGER NN
+  reserved_at : TIMESTAMP NN DF NOW()
+  status : VARCHAR(20) NN DF 'confirmed'
+  --
+  CHECK (status IN ('confirmed',
+    'cancelled', 'cancelled_expired'))
+  UNIQUE (member_id, class_id, status)
+    WHERE status = 'confirmed'
+  INDEX idx_reservations_member
+    (member_id)
+  INDEX idx_reservations_class (class_id)
+  INDEX idx_reservations_status (status)
+}
+
+note right of reservations
+  **Partial UNIQUE index:**
+  Previne rezervarea duplicat
+  a aceluiași membru la aceeași
+  clasă (doar pt 'confirmed').
+  Permite existența mai multor
+  rânduri 'cancelled'.
+end note
+
+entity "equipment" as equipment {
+  PK id : SERIAL
+  --
+  FK facility_id : INTEGER NN
+  name : VARCHAR(100) NN
+  category : VARCHAR(50) NN
+  quantity : INTEGER NN DF 1
+  condition : VARCHAR(30) NN DF 'good'
+  notes : TEXT
+  created_at : TIMESTAMP NN DF NOW()
+  updated_at : TIMESTAMP NN DF NOW()
+  --
+  CHECK (quantity >= 0)
+  CHECK (condition IN ('new', 'good',
+    'fair', 'needs_repair',
+    'decommissioned'))
+  INDEX idx_equipment_facility
+    (facility_id)
+}
+
+entity "restricted_clients" as restricted {
+  PK id : SERIAL
+  --
+  FK member_id : INTEGER NN UQ
+  FK subscription_id : INTEGER NN
+  restricted_at : TIMESTAMP NN DF NOW()
+  reason : VARCHAR(100) NN
+  --
+  INDEX idx_restricted_member
+    (member_id)
+}
+
+note bottom of restricted
+  **REQ-6:**
+  Populat automat de Cron Job
+  când un abonament expiră.
+  **UNIQUE pe member_id:**
+  Un membru poate fi restricționat
+  o singură dată la un moment dat.
+end note
+
+' ══════════════════════════════════
+' RELAȚII (FK)
+' ══════════════════════════════════
+
+' users 1──1 members
+users ||--o| members : "user_id\n(1:0..1)"
+
+' members 1──N subscriptions
+members ||--o{ subscriptions : "member_id\n(1:N)"
+
+' subscription_types 1──N subscriptions
+sub_types ||--o{ subscriptions : "type_id\n(1:N)"
+
+' subscriptions 1──N payments
+subscriptions ||--o{ payments : "subscription_id\n(1:N)"
+
+' members 1──N reservations
+members ||--o{ reservations : "member_id\n(1:N)"
+
+' classes 1──N reservations
+classes ||--o{ reservations : "class_id\n(1:N)"
+
+' trainers 1──N classes
+trainers ||--o{ classes : "trainer_id\n(1:N)"
+
+' facilities 1──N classes
+facilities ||--o{ classes : "facility_id\n(1:N)"
+
+' facilities 1──N equipment
+facilities ||--o{ equipment : "facility_id\n(1:N)"
+
+' members 1──0..1 restricted_clients
+members ||--o| restricted : "member_id\n(1:0..1)"
+
+' subscriptions 1──0..1 restricted_clients
+subscriptions ||--o| restricted : "subscription_id\n(1:0..1)"
+
+@enduml
