@@ -45,7 +45,7 @@ app.add_middleware(
 app.include_router(auth.router)
 
 # ── Health check ──
-@app.get("/health", tags=["infra"])
+@app.get("/api/health", tags=["infra"])
 async def health_check():
     """Simple liveness probe."""
     return {"status": "ok"}
