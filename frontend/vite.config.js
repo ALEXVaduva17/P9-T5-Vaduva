@@ -13,9 +13,8 @@ export default defineConfig({
     proxy: {
       // Proxy /api requests to the FastAPI backend service
       "/api": {
-        target: "http://backend:8000",
+        target: "http://localhost:8000",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },
   },

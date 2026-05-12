@@ -30,6 +30,10 @@ dist/
 # Environment (contains secrets)
 .env
 
+# Local SQLite
+*.db
+*.sqlite3
+
 # Docker
 docker-compose.override.yml
 

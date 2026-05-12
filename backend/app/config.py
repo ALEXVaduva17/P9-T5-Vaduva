@@ -10,9 +10,7 @@ class Settings(BaseSettings):
     """Central configuration — values are read from env vars / .env file."""
 
     # ── Database ──
-    DATABASE_URL: str = (
-        "postgresql+asyncpg://fitness_user:fitness_secret_password@db:5432/fitness_center_db"
-    )
+    DATABASE_URL: str = "sqlite+aiosqlite:///./fitness_center.db"
 
     # ── Security ──
     SECRET_KEY: str = "change-me-to-a-random-secret"
@@ -22,9 +20,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file="../.env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
 
