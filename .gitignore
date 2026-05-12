@@ -22,5 +22,16 @@ ENV/
 *.swp
 *.swo
 
+# Node / Frontend
+node_modules/
+dist/
+.vite/
+
+# Environment (contains secrets)
+.env
+
+# Docker
+docker-compose.override.yml
+
 # Data/Temporary files (extracted)
 docs/extracted/
