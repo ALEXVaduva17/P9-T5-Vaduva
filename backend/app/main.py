@@ -22,7 +22,7 @@ from app.models.subscription import Subscription  # noqa: F401
 from app.models.restricted_client import RestrictedClient  # noqa: F401
 
 # ── Routers ──
-from app.routers import auth, members, subscriptions
+from app.routers import auth, members, subscriptions, payments
 
 # ── Scheduler ──
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -32,7 +32,6 @@ from app.tasks.expiration_cron import run_expiration_check
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
-
 
 # ── Lifespan (startup / shutdown) ──
 @asynccontextmanager
@@ -89,7 +88,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(members.router)
 app.include_router(subscriptions.router)
-
+app.include_router(payments.router)
 
 # ── Health check ──
 @app.get("/api/health", tags=["infra"])

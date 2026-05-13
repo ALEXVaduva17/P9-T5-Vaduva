@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import MemberDashboard from "./pages/MemberDashboard.jsx";
+import Payments from "./pages/Payments";
 import "./App.css";
 
 function AppContent() {
@@ -49,6 +50,14 @@ function AppContent() {
               Member View
             </button>
             <button
+              id="nav-payments"
+              className={`nav-btn ${view === "payments" ? "nav-btn--active" : ""}`}
+              onClick={() => setView("payments")}
+            >
+              <span className="nav-icon">&#128176;</span>
+              Payments
+            </button>
+            <button
               id="nav-logout"
               className="nav-btn"
               onClick={logout}
@@ -60,7 +69,7 @@ function AppContent() {
 
         {/* ── Main content ── */}
         <main className="app-main">
-          {view === "admin" ? <AdminDashboard /> : <MemberDashboard />}
+          {view === "admin" ? <AdminDashboard /> : view === "member" ? <MemberDashboard /> : <Payments />}
         </main>
       </div>
     </div>
