@@ -7,6 +7,9 @@ export default defineConfig({
   server: {
     host: "0.0.0.0", // Expose to Docker network
     port: 5173,
+    fs: {
+      strict: false,
+    },
     watch: {
       usePolling: true, // Required for hot-reload inside Docker (volume mounts)
     },
