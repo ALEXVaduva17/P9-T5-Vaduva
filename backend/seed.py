@@ -3,10 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.database import engine, async_session_factory, Base
 from app.models.user import User, UserRole
+from app.models.member import Member  # noqa: F401 — needed for relationship resolution
+from app.models.subscription_type import SubscriptionType  # noqa: F401
+from app.models.subscription import Subscription  # noqa: F401
+from app.models.restricted_client import RestrictedClient  # noqa: F401
 from app.services.auth_service import get_password_hash
 
 async def seed_data():
-    print("🚀 Starting database seeding...")
+    print("Starting database seeding...")
     
     # Create tables
     async with engine.begin() as conn:
@@ -28,11 +32,11 @@ async def seed_data():
             )
             session.add(new_admin)
             await session.commit()
-            print("✅ Admin user created: admin@fitness.com / parola123")
+            print("Admin user created: admin@fitness.com / parola123")
         else:
-            print("⚠️ Admin user already exists.")
+            print("Admin user already exists.")
 
-    print("🏁 Seeding complete!")
+    print("Seeding complete!")
     await engine.dispose()
 
 if __name__ == "__main__":
