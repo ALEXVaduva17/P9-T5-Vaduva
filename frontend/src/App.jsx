@@ -1,10 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import MemberDashboard from "./pages/MemberDashboard.jsx";
 import "./App.css";
 
-function App() {
+function AppContent() {
+  const { isAuthenticated, user, logout } = useAuth();
   const [view, setView] = useState("admin");
+
+  if (!isAuthenticated) {
+    return <Login />;
+  }
 
   return (
     <div className="app">
@@ -41,6 +48,13 @@ function App() {
               <span className="nav-icon">&#9733;</span>
               Member View
             </button>
+            <button
+              id="nav-logout"
+              className="nav-btn"
+              onClick={logout}
+            >
+              Logout
+            </button>
           </nav>
         </header>
 
@@ -50,6 +64,14 @@ function App() {
         </main>
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

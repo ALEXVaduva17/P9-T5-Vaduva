@@ -28,6 +28,6 @@ class Member(Base):
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
 
     # ── Relationships ──
-    user = relationship("User", backref="member_profile", uselist=False, lazy="selectin")
+    user = relationship("User", back_populates="member_profile", uselist=False, lazy="selectin")
     subscriptions = relationship("Subscription", back_populates="member", lazy="selectin")
     restricted_record = relationship("RestrictedClient", back_populates="member", uselist=False, lazy="selectin")

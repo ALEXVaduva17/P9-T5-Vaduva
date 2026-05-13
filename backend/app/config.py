@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Central configuration — values are read from .env automatically."""
+    """Central configuration — values are read from env vars / .env file."""
 
     # ── Database ──
     DATABASE_URL: str = "sqlite+aiosqlite:///./fitness_center.db"
@@ -27,4 +27,5 @@ class Settings(BaseSettings):
     )
 
 
+# Singleton instance — import this wherever settings are needed
 settings = Settings()

@@ -16,7 +16,6 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
-# ── Engine ──
 is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
 engine_kwargs = {
@@ -34,20 +33,21 @@ engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
 # ── Session factory ──
 async_session_factory = async_sessionmaker(
-    engine,
+    bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
 
 
-# ── Declarative base ──
+# ── Declarative Base (models will inherit from this) ──
 class Base(DeclarativeBase):
+    """Base class for all ORM models."""
     pass
 
 
-# ── FastAPI dependency ──
-async def get_session():
-    """Yield an AsyncSession and handle commit / rollback."""
+# ── Dependency for FastAPI ──
+async def get_session() -> AsyncSession:  # type: ignore[misc]
+    """Yield an async session and ensure it is closed after the request."""
     async with async_session_factory() as session:
         try:
             yield session
@@ -55,3 +55,5 @@ async def get_session():
         except Exception:
             await session.rollback()
             raise
+        finally:
+            await session.close()

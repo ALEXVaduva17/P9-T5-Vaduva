@@ -30,6 +30,7 @@
   --danger-bg: rgba(225, 112, 85, 0.12);
   --info: #74b9ff;
   --info-bg: rgba(116, 185, 255, 0.12);
+  --error: #ff5252;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -48,6 +49,10 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
 }
 
 button {

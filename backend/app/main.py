@@ -5,7 +5,6 @@ Registers routers, configures CORS, sets up APScheduler
 for the daily expiration cron job, and creates tables on startup.
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -23,7 +22,7 @@ from app.models.subscription import Subscription  # noqa: F401
 from app.models.restricted_client import RestrictedClient  # noqa: F401
 
 # ── Routers ──
-from app.routers import members, subscriptions
+from app.routers import auth, members, subscriptions
 
 # ── Scheduler ──
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -42,7 +41,7 @@ async def lifespan(app: FastAPI):
     # Startup — create tables (development only, use Alembic in production)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("✅ Database tables created/verified.")
+    logger.info("Database tables created/verified.")
 
     # Seed default subscription types if none exist
     await _seed_subscription_types()
@@ -56,32 +55,38 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("⏰ APScheduler started — expiration cron scheduled at 00:00 daily.")
+    logger.info("APScheduler started — expiration cron scheduled at 00:00 daily.")
 
     yield
 
     # Shutdown
     scheduler.shutdown(wait=False)
     await engine.dispose()
-    logger.info("🔌 Database connections closed.")
+    logger.info("Database connections closed.")
 
 
+# ── App instance ──
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="0.2.0",
     lifespan=lifespan,
 )
 
-# ── CORS ──
+# ── CORS (allow the Vite dev server) ──
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://frontend:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Register routers ──
+# ── Register all routers ──
+app.include_router(auth.router)
 app.include_router(members.router)
 app.include_router(subscriptions.router)
 
@@ -89,6 +94,7 @@ app.include_router(subscriptions.router)
 # ── Health check ──
 @app.get("/api/health", tags=["infra"])
 async def health_check():
+    """Simple liveness probe."""
     return {
         "status": "operational",
         "service": settings.PROJECT_NAME,
@@ -116,4 +122,4 @@ async def _seed_subscription_types():
             ]
             session.add_all(defaults)
             await session.commit()
-            logger.info("🌱 Seeded 4 default subscription types.")
+            logger.info("Seeded 4 default subscription types.")
