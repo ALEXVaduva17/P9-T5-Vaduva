@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.member import Member
 from app.models.subscription import Subscription
 from app.models.subscription_type import SubscriptionType
-from app.schemas.subscription import SubscriptionCreate, SubscriptionTypeUpdate
+from app.schemas.subscription import SubscriptionCreate, SubscriptionTypeUpdate, SubscriptionTypeCreate, SubscriptionUpdate
 
 
 PT_SESSION_COST = Decimal("50")  # REQ-8: each PT session costs 50 RON
@@ -52,6 +52,43 @@ async def update_subscription_type(
     await session.flush()
     await session.refresh(sub_type)
     return sub_type
+
+
+async def create_subscription_type(
+    session: AsyncSession,
+    data: SubscriptionTypeCreate,
+) -> SubscriptionType:
+    """Admin creates a new subscription type."""
+    new_type = SubscriptionType(
+        name=data.name,
+        base_fee=data.base_fee,
+        duration_days=data.duration_days,
+        description=getattr(data, 'description', None),
+        is_active=data.is_active
+    )
+    session.add(new_type)
+    await session.flush()
+    await session.refresh(new_type)
+    return new_type
+
+
+async def delete_subscription_type(
+    session: AsyncSession,
+    type_id: int,
+) -> None:
+    """Admin deletes a subscription type."""
+    q = select(SubscriptionType).where(SubscriptionType.id == type_id)
+    result = await session.execute(q)
+    sub_type = result.scalar_one_or_none()
+
+    if not sub_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"SubscriptionType with id={type_id} not found",
+        )
+
+    await session.delete(sub_type)
+    await session.flush()
 
 
 def calculate_total(base_fee: Decimal, pt_sessions: int) -> Decimal:
@@ -159,3 +196,70 @@ async def get_member_subscriptions(
     )
     result = await session.execute(q)
     return list(result.scalars().all())
+
+
+async def update_member_subscription(
+    session: AsyncSession,
+    member_id: int,
+    data: SubscriptionUpdate,
+) -> Subscription:
+    """Admin updates an active subscription for a member."""
+    active_sub = await get_active_subscription(session, member_id)
+    if not active_sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active subscription found for this member",
+        )
+
+    type_q = select(SubscriptionType).where(SubscriptionType.id == data.type_id)
+    sub_type = (await session.execute(type_q)).scalar_one_or_none()
+    if not sub_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"SubscriptionType with id={data.type_id} not found",
+        )
+    if not sub_type.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This subscription type is currently inactive",
+        )
+
+    total = calculate_total(sub_type.base_fee, data.pt_sessions)
+    type_label = "personalized" if data.pt_sessions > 0 else "standard"
+
+    active_sub.type_id = data.type_id
+    active_sub.type = type_label
+    active_sub.base_fee = sub_type.base_fee
+    active_sub.pt_sessions = data.pt_sessions
+    active_sub.total_amount = total
+    # Recalculate end_date from start_date if duration changed
+    active_sub.end_date = active_sub.start_date + timedelta(days=sub_type.duration_days)
+
+    await session.flush()
+    await session.refresh(active_sub)
+    return active_sub
+
+
+async def cancel_member_subscription(
+    session: AsyncSession,
+    member_id: int,
+) -> None:
+    """Admin cancels an active subscription for a member."""
+    active_sub = await get_active_subscription(session, member_id)
+    if not active_sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active subscription found for this member",
+        )
+
+    member_q = select(Member).where(Member.id == member_id)
+    member = (await session.execute(member_q)).scalar_one_or_none()
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Member with id={member_id} not found",
+        )
+
+    await session.delete(active_sub)
+    member.subscription_status = "none"
+    await session.flush()

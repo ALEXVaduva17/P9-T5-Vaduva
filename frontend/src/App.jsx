@@ -35,6 +35,13 @@ function AppContent() {
           setView("login");
           return null;
         }
+        if (!user) {
+          return (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+              <div className="loader">Se încarcă profilul...</div>
+            </div>
+          );
+        }
         return user?.role === "admin" ? <AdminDashboard /> : <MemberDashboard />;
       default:
         return <LandingPage setView={setView} />;

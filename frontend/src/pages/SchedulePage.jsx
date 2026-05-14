@@ -7,14 +7,13 @@ export default function SchedulePage({ setView }) {
   const [dayFilter, setDayFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
   const [userReservations, setUserReservations] = useState([]);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, token } = useAuth();
 
   useEffect(() => {
     const fetchClasses = fetch('/api/classes').then(res => res.json());
     
     let fetchReservations = Promise.resolve([]);
-    if (isAuthenticated && user?.role === "member") {
-      const token = localStorage.getItem("token");
+    if (isAuthenticated && user?.role === "member" && token) {
       fetchReservations = fetch('/api/reservations/me', {
         headers: { "Authorization": `Bearer ${token}` }
       }).then(res => res.ok ? res.json() : []);
@@ -34,7 +33,7 @@ export default function SchedulePage({ setView }) {
         console.error(err);
         setLoading(false);
       });
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, token]);
 
   const handleBook = async (classId) => {
     if (!isAuthenticated) {
@@ -48,12 +47,14 @@ export default function SchedulePage({ setView }) {
       return;
     }
 
+    if (!token) return;
+
     try {
       const res = await fetch("/api/reservations/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({ class_id: classId })
       });

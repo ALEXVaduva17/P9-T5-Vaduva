@@ -33,6 +33,14 @@ class SubscriptionTypeUpdate(BaseModel):
     duration_days: Optional[int] = None
     is_active: Optional[bool] = None
 
+class SubscriptionTypeCreate(BaseModel):
+    """Admin creates a new subscription type."""
+    name: str
+    base_fee: Decimal
+    duration_days: int = 30
+    description: Optional[str] = None
+    is_active: bool = True
+
 
 # ══════════════════════════════════
 # Subscription schemas
@@ -41,6 +49,19 @@ class SubscriptionTypeUpdate(BaseModel):
 class SubscriptionCreate(BaseModel):
     """Admin creates a subscription for a member."""
     member_id: int
+    type_id: int
+    pt_sessions: int = 0
+
+    @field_validator("pt_sessions")
+    @classmethod
+    def pt_sessions_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("pt_sessions must be >= 0")
+        return v
+
+
+class SubscriptionUpdate(BaseModel):
+    """Admin updates an active subscription for a member."""
     type_id: int
     pt_sessions: int = 0
 

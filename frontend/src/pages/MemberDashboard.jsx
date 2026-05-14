@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 function MemberDashboard() {
+  const { token } = useAuth();
   const [data, setData] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -11,9 +13,10 @@ function MemberDashboard() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
 
   useEffect(() => {
+    if (!token) return;
+
     const fetchSub = async () => {
       try {
-        const token = localStorage.getItem("token");
         const res = await fetch("/api/subscriptions/me", {
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -37,7 +40,6 @@ function MemberDashboard() {
     
     const fetchReservations = async () => {
       try {
-        const token = localStorage.getItem("token");
         const res = await fetch("/api/reservations/me", {
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -52,7 +54,6 @@ function MemberDashboard() {
 
     const fetchPayments = async () => {
       try {
-        const token = localStorage.getItem("token");
         const res = await fetch("/api/payments/me", {
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -67,7 +68,6 @@ function MemberDashboard() {
 
     const fetchTrainerSessions = async () => {
       try {
-        const token = localStorage.getItem("token");
         const res = await fetch("/api/trainers/sessions/me", {
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -84,13 +84,12 @@ function MemberDashboard() {
     fetchReservations();
     fetchPayments();
     fetchTrainerSessions();
-  }, []);
+  }, [token]);
 
   const handleCancelReservation = async (id) => {
     if (!window.confirm("Ești sigur că vrei să anulezi această rezervare?")) return;
     
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch(`/api/reservations/${id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }

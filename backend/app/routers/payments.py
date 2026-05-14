@@ -34,8 +34,7 @@ class PaymentResponse(BaseModel):
     status: PaymentStatus
     paid_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 @router.post("/initiate")
 async def initiate(req: InitiatePaymentReq, session: AsyncSession = Depends(get_session)):

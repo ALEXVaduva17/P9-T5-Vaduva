@@ -26,8 +26,7 @@ class EquipmentCreate(BaseModel):
 class EquipmentResponse(EquipmentCreate):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 @router.post("/", response_model=EquipmentResponse)
 async def create_equipment(

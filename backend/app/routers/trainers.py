@@ -25,8 +25,7 @@ class TrainerResponse(BaseModel):
     bio: str | None = None
     photo_url: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 class TrainerCreate(BaseModel):
     name: str

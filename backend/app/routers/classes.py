@@ -34,8 +34,7 @@ class ClassResponse(BaseModel):
     description: str | None = None
     duration_minutes: int = 60
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 @router.get("", response_model=list[ClassResponse])
@@ -190,3 +189,18 @@ async def update_class(
         description=fitness_class.description if hasattr(fitness_class, 'description') else None,
         duration_minutes=fitness_class.duration_minutes if hasattr(fitness_class, 'duration_minutes') else 60,
     )
+
+@router.delete("/{class_id}", status_code=204)
+async def delete_class(
+    class_id: int,
+    session: AsyncSession = Depends(get_session),
+    _admin=Depends(require_admin)
+):
+    result = await session.execute(select(FitnessClass).where(FitnessClass.id == class_id))
+    fitness_class = result.scalars().first()
+    if not fitness_class:
+        raise HTTPException(status_code=404, detail="Class not found")
+        
+    await session.delete(fitness_class)
+    await session.commit()
+    return None

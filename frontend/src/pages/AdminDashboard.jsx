@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 function AdminDashboard() {
+  const { token } = useAuth();
   const [members, setMembers] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -9,6 +11,7 @@ function AdminDashboard() {
   const [showSubModal, setShowSubModal] = useState(false);
   const [showClassModal, setShowClassModal] = useState(false);
   const [showEditPlanModal, setShowEditPlanModal] = useState(false);
+  const [showCreatePlanModal, setShowCreatePlanModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [subTypes, setSubTypes] = useState([]);
@@ -25,13 +28,15 @@ function AdminDashboard() {
   const [selectedFacility, setSelectedFacility] = useState(null);
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
   const [selectedMemberForEdit, setSelectedMemberForEdit] = useState(null);
+  const [showEditSubModal, setShowEditSubModal] = useState(false);
+  const [selectedMemberForSubEdit, setSelectedMemberForSubEdit] = useState(null);
   
   const [activeTab, setActiveTab] = useState("members");
 
   const fetchMembers = useCallback(async () => {
+    if (!token) return;
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/members", {
         headers: { "Authorization": `Bearer ${token}` }
       });
@@ -44,11 +49,11 @@ function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
   const fetchSubTypes = useCallback(async () => {
+    if (!token) return;
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/subscriptions/types", {
         headers: { "Authorization": `Bearer ${token}` }
       });
@@ -58,7 +63,7 @@ function AdminDashboard() {
     } catch (err) {
       console.error(err);
     }
-  }, []);
+  }, [token]);
 
   const fetchClasses = useCallback(async () => {
     try {
@@ -103,7 +108,6 @@ function AdminDashboard() {
 
   const handleCreateFacility = async (formData) => {
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/facilities", {
         method: "POST",
         headers: { 
@@ -276,6 +280,49 @@ function AdminDashboard() {
     }
   };
 
+  const handleUpdateSub = async (memberId, formData) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/subscriptions/member/${memberId}`, {
+        method: "PUT",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(formData),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Failed to update subscription");
+      }
+      setShowEditSubModal(false);
+      setSelectedMemberForSubEdit(null);
+      fetchMembers();
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const handleCancelSub = async (memberId) => {
+    if (!confirm("Ești sigur că vrei să anulezi/ștergi abonamentul activ al acestui membru?")) return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/subscriptions/member/${memberId}`, {
+        method: "DELETE",
+        headers: { 
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Failed to cancel subscription");
+      }
+      fetchMembers();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const handleCreateClass = async (formData) => {
     try {
       const token = localStorage.getItem("token");
@@ -318,6 +365,25 @@ function AdminDashboard() {
       fetchClasses();
     } catch (err) {
       throw err;
+    }
+  };
+
+  const handleDeleteClass = async (classId) => {
+    if (!confirm("Ești sigur că vrei să ștergi această clasă?")) return;
+    try {
+      const res = await fetch(`/api/classes/${classId}`, {
+        method: "DELETE",
+        headers: { 
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Failed to delete class");
+      }
+      fetchClasses();
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -406,6 +472,46 @@ function AdminDashboard() {
       fetchSubTypes();
     } catch (err) {
       throw err;
+    }
+  };
+
+  const handleCreatePlan = async (formData) => {
+    try {
+      const res = await fetch("/api/subscriptions/types", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(formData),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Failed to create plan");
+      }
+      setShowCreatePlanModal(false);
+      fetchSubTypes();
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const handleDeletePlan = async (typeId) => {
+    if (!confirm("Ești sigur că vrei să ștergi acest plan de abonament?")) return;
+    try {
+      const res = await fetch(`/api/subscriptions/types/${typeId}`, {
+        method: "DELETE",
+        headers: { 
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Failed to delete plan");
+      }
+      fetchSubTypes();
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -521,6 +627,27 @@ function AdminDashboard() {
                             + Subscription
                           </button>
                         )}
+                        {m.subscription_status === "active" && (
+                          <>
+                            <button
+                              className="btn btn-outline btn--sm"
+                              style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                              onClick={() => {
+                                setSelectedMemberForSubEdit(m);
+                                setShowEditSubModal(true);
+                              }}
+                            >
+                              Modifică Abonament
+                            </button>
+                            <button
+                              className="btn btn-outline btn--sm"
+                              style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
+                              onClick={() => handleCancelSub(m.id)}
+                            >
+                              Scoate Abonament
+                            </button>
+                          </>
+                        )}
                         <button
                           className="btn btn-outline btn--sm"
                           onClick={() => {
@@ -580,15 +707,24 @@ function AdminDashboard() {
                 </div>
                 <div className="class-actions" style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div className="capacity-badge">{c.reserved_count} / {c.capacity} Ocupat</div>
-                  <button 
-                    className="btn btn-outline btn--sm" 
-                    onClick={() => {
-                      setSelectedClass(c);
-                      setShowEditClassModal(true);
-                    }}
-                  >
-                    Edit
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button 
+                      className="btn btn-outline btn--sm" 
+                      onClick={() => {
+                        setSelectedClass(c);
+                        setShowEditClassModal(true);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      className="btn btn-outline btn--sm" 
+                      style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                      onClick={() => handleDeleteClass(c.id)}
+                    >
+                      Șterge
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -599,8 +735,14 @@ function AdminDashboard() {
       {/* ── Subscription Types Tab ── */}
       {activeTab === 'plans' && (
         <div className="card" style={{ marginTop: 24 }}>
-          <div className="card-title">
-            <span>💰</span> Subscription Plans
+          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div><span>💰</span> Subscription Plans</div>
+            <button
+              className="btn btn-accent btn--sm"
+              onClick={() => setShowCreatePlanModal(true)}
+            >
+              + Add Plan
+            </button>
           </div>
           <div className="plans-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
             {subTypes.map((t) => (
@@ -608,16 +750,25 @@ function AdminDashboard() {
                 <div className="plan-name" style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{t.name}</div>
                 <div className="plan-price" style={{ fontSize: '1.5rem', color: 'var(--accent)', margin: '0.5rem 0' }}>{parseFloat(t.base_fee).toFixed(0)} RON</div>
                 <div className="plan-duration" style={{ color: 'var(--text-secondary)' }}>{t.duration_days} days</div>
-                <button 
-                  className="btn btn-outline" 
-                  style={{ width: '100%', marginTop: '1rem' }}
-                  onClick={() => {
-                    setSelectedPlan(t);
-                    setShowEditPlanModal(true);
-                  }}
-                >
-                  Edit Plan
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                  <button 
+                    className="btn btn-outline" 
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      setSelectedPlan(t);
+                      setShowEditPlanModal(true);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    className="btn btn-outline" 
+                    style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                    onClick={() => handleDeletePlan(t.id)}
+                  >
+                    Șterge
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -711,12 +862,31 @@ function AdminDashboard() {
         />
       )}
 
+      {showEditSubModal && selectedMemberForSubEdit && (
+        <EditSubModal
+          member={selectedMemberForSubEdit}
+          subTypes={subTypes}
+          onClose={() => {
+            setShowEditSubModal(false);
+            setSelectedMemberForSubEdit(null);
+          }}
+          onUpdate={handleUpdateSub}
+        />
+      )}
+
       {showClassModal && (
         <CreateClassModal
           trainers={trainers}
           facilities={facilities}
           onClose={() => setShowClassModal(false)}
           onCreate={handleCreateClass}
+        />
+      )}
+
+      {showCreatePlanModal && (
+        <CreatePlanModal
+          onClose={() => setShowCreatePlanModal(false)}
+          onCreate={handleCreatePlan}
         />
       )}
 
@@ -987,6 +1157,90 @@ function CreateSubModal({ member, subTypes, onClose, onCreate }) {
   );
 }
 
+function EditSubModal({ member, subTypes, onClose, onUpdate }) {
+  const [typeId, setTypeId] = useState("");
+  const [ptSessions, setPtSessions] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function fetchSub() {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`/api/subscriptions/member/${member.id}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error("Failed to fetch active subscription");
+        const data = await res.json();
+        setTypeId(data.type_id);
+        setPtSessions(data.pt_sessions);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSub();
+  }, [member.id]);
+
+  const selectedType = subTypes.find((t) => t.id === Number(typeId));
+  const baseFee = selectedType ? parseFloat(selectedType.base_fee) : 0;
+  const totalAmount = baseFee + ptSessions * 50;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await onUpdate(member.id, {
+        type_id: Number(typeId),
+        pt_sessions: ptSessions,
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Modifică Abonament: {member.first_name}</div>
+        {error && <div className="error-banner">{error}</div>}
+        {loading ? (
+          <div className="loader" style={{ margin: "2rem 0" }}>Se încarcă detaliile...</div>
+        ) : (
+          <form className="modal-form" onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Subscription Plan</label>
+              <select className="form-input" value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+                {subTypes.filter((t) => t.is_active).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} — {parseFloat(t.base_fee).toFixed(0)} RON</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>PT Sessions (50 RON each)</label>
+              <input className="form-input" type="number" min="0" value={ptSessions} onChange={(e) => setPtSessions(Math.max(0, Number(e.target.value)))} />
+            </div>
+            <div className="price-preview">
+              <div className="price-row"><span>Base fee</span><span>{baseFee.toFixed(2)} RON</span></div>
+              <div className="price-row"><span>PT sessions</span><span>{(ptSessions * 50).toFixed(2)} RON</span></div>
+              <div className="price-row price-row--total"><span>Total</span><span>{totalAmount.toFixed(2)} RON</span></div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-outline" onClick={onClose}>Anulează</button>
+              <button type="submit" className="btn btn-accent" disabled={saving}>{saving ? "Se salvează..." : "Salvează Modificările"}</button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CreateClassModal({ trainers, facilities, onClose, onCreate }) {
   const [form, setForm] = useState({
     name: "",
@@ -1109,6 +1363,61 @@ function EditPlanModal({ plan, onClose, onUpdate }) {
           <div className="modal-actions">
             <button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-accent" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function CreatePlanModal({ onClose, onCreate }) {
+  const [form, setForm] = useState({
+    name: "",
+    base_fee: 100,
+    duration_days: 30,
+    description: ""
+  });
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await onCreate(form);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Add New Subscription Plan</div>
+        {error && <div className="error-banner">{error}</div>}
+        <form className="modal-form" onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Plan Name</label>
+            <input className="form-input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label>Base Fee (RON)</label>
+            <input className="form-input" type="number" step="0.01" required value={form.base_fee} onChange={(e) => setForm({ ...form, base_fee: Number(e.target.value) })} />
+          </div>
+          <div className="form-group">
+            <label>Duration (days)</label>
+            <input className="form-input" type="number" min="1" required value={form.duration_days} onChange={(e) => setForm({ ...form, duration_days: Number(e.target.value) })} />
+          </div>
+          <div className="form-group">
+            <label>Description (optional)</label>
+            <textarea className="form-input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-accent" disabled={saving}>{saving ? "Creating..." : "Create Plan"}</button>
           </div>
         </form>
       </div>

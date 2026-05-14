@@ -19,6 +19,8 @@ from app.schemas.subscription import (
     SubscriptionResponse,
     SubscriptionTypeResponse,
     SubscriptionTypeUpdate,
+    SubscriptionTypeCreate,
+    SubscriptionUpdate,
 )
 from app.services import member_service, subscription_service
 
@@ -157,7 +159,47 @@ async def create_subscription(
 ):
     """POST /api/subscriptions — admin creates a subscription for a member."""
     sub = await subscription_service.create_subscription(session, data)
+    await session.commit()
     return SubscriptionResponse.model_validate(sub)
+
+
+@router.get("/member/{member_id}", response_model=SubscriptionResponse)
+async def get_member_subscription(
+    member_id: int,
+    session: AsyncSession = Depends(get_session),
+    _admin: dict = Depends(require_admin),
+):
+    """GET /api/subscriptions/member/{member_id} — admin gets member active subscription."""
+    from fastapi import HTTPException
+    sub = await subscription_service.get_active_subscription(session, member_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="No active subscription found")
+    return SubscriptionResponse.model_validate(sub)
+
+
+@router.put("/member/{member_id}", response_model=SubscriptionResponse)
+async def update_member_subscription(
+    member_id: int,
+    data: SubscriptionUpdate,
+    session: AsyncSession = Depends(get_session),
+    _admin: dict = Depends(require_admin),
+):
+    """PUT /api/subscriptions/member/{member_id} — admin updates member active subscription."""
+    sub = await subscription_service.update_member_subscription(session, member_id, data)
+    await session.commit()
+    return SubscriptionResponse.model_validate(sub)
+
+
+@router.delete("/member/{member_id}", status_code=204)
+async def cancel_member_subscription(
+    member_id: int,
+    session: AsyncSession = Depends(get_session),
+    _admin: dict = Depends(require_admin),
+):
+    """DELETE /api/subscriptions/member/{member_id} — admin cancels member active subscription."""
+    await subscription_service.cancel_member_subscription(session, member_id)
+    await session.commit()
+    return None
 
 
 @router.put("/types/{type_id}", response_model=SubscriptionTypeResponse)
@@ -170,3 +212,24 @@ async def update_subscription_type(
     """PUT /api/subscriptions/types/{id} — admin updates subscription type / price (REQ-4)."""
     sub_type = await subscription_service.update_subscription_type(session, type_id, data)
     return SubscriptionTypeResponse.model_validate(sub_type)
+
+@router.post("/types", response_model=SubscriptionTypeResponse, status_code=201)
+async def create_subscription_type(
+    data: SubscriptionTypeCreate,
+    session: AsyncSession = Depends(get_session),
+    _admin: dict = Depends(require_admin),
+):
+    """POST /api/subscriptions/types — admin creates a new subscription type."""
+    sub_type = await subscription_service.create_subscription_type(session, data)
+    return SubscriptionTypeResponse.model_validate(sub_type)
+
+@router.delete("/types/{type_id}", status_code=204)
+async def delete_subscription_type(
+    type_id: int,
+    session: AsyncSession = Depends(get_session),
+    _admin: dict = Depends(require_admin),
+):
+    """DELETE /api/subscriptions/types/{id} — admin deletes a subscription type."""
+    await subscription_service.delete_subscription_type(session, type_id)
+    await session.commit()
+    return None
