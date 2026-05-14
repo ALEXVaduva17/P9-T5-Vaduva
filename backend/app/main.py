@@ -20,9 +20,14 @@ from app.models.member import Member  # noqa: F401
 from app.models.subscription_type import SubscriptionType  # noqa: F401
 from app.models.subscription import Subscription  # noqa: F401
 from app.models.restricted_client import RestrictedClient  # noqa: F401
-
+from app.models.facility import Facility  # noqa: F401
+from app.models.fitness_class import FitnessClass  # noqa: F401
+from app.models.reservation import Reservation  # noqa: F401
+from app.models.equipment import Equipment  # noqa: F401
+from app.models.trainer import Trainer  # noqa: F401
+from app.models.trainer_session import TrainerSession  # noqa: F401
 # ── Routers ──
-from app.routers import auth, members, subscriptions, payments
+from app.routers import auth, members, subscriptions, payments, equipment, reports, reservations, classes, trainers, facilities
 
 # ── Scheduler ──
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -89,6 +94,18 @@ app.include_router(auth.router)
 app.include_router(members.router)
 app.include_router(subscriptions.router)
 app.include_router(payments.router)
+app.include_router(equipment.router)
+app.include_router(reports.router)
+app.include_router(reservations.router)
+app.include_router(classes.router)
+app.include_router(trainers.router)
+app.include_router(facilities.router)
+
+import os
+from fastapi.staticfiles import StaticFiles
+
+os.makedirs("uploads", exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # ── Health check ──
 @app.get("/api/health", tags=["infra"])

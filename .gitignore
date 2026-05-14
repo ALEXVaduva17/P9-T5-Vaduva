@@ -54,3 +54,6 @@ dist/
 
 # Docker
 docker-compose.override.yml
+
+# Uploads
+backend/uploads/

@@ -24,6 +24,7 @@ class Member(Base):
     #   'expired'    — subscription ended naturally
     #   'restricted' — moved to restricted_clients by cron (REQ-6)
     subscription_status = Column(String(20), nullable=False, default="none", index=True)
+    photo_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
 

@@ -24,6 +24,9 @@ class MemberUpdate(BaseModel):
     last_name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
+    subscription_status: Optional[str] = None
+    photo_url: Optional[str] = None
+    password: Optional[str] = None
 
 
 # ── Response schemas ──
@@ -37,6 +40,7 @@ class MemberResponse(BaseModel):
     phone: str
     email: str
     subscription_status: str
+    photo_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

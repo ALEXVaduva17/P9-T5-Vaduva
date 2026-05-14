@@ -18,6 +18,7 @@ from app.database import async_session_factory
 from app.models.member import Member
 from app.models.subscription import Subscription
 from app.models.restricted_client import RestrictedClient
+from app.services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,14 @@ async def run_expiration_check():
                         )
                         session.add(restricted)
                         restricted_count += 1
+                        
+                        # 5. Send notification email (UC-27)
+                        if member.user and member.user.email:
+                            await EmailService.send_expiration_notification(
+                                member_email=member.user.email,
+                                member_name=f"{member.first_name} {member.last_name}",
+                                subscription_id=sub.id
+                            )
 
             await session.commit()
 

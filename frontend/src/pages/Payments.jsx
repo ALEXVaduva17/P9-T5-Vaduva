@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -16,7 +17,10 @@ export default function Payments() {
   }, [user]);
 
   const fetchHistory = () => {
-    fetch("/api/payments/history")
+    const token = localStorage.getItem("token");
+    fetch("/api/payments/me", {
+      headers: { "Authorization": `Bearer ${token}` }
+    })
       .then(res => res.json())
       .then(data => {
         setPayments(data);
@@ -26,7 +30,10 @@ export default function Payments() {
   };
 
   const fetchAllPayments = () => {
-    fetch("/api/payments/all")
+    const token = localStorage.getItem("token");
+    fetch("/api/payments/all", {
+      headers: { "Authorization": `Bearer ${token}` }
+    })
       .then(res => res.json())
       .then(data => setAllPayments(data))
       .catch(err => console.error(err));

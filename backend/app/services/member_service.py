@@ -125,6 +125,14 @@ async def update_member(
         user = (await session.execute(user_q)).scalar_one()
         user.email = new_email
 
+    if "password" in update_data:
+        new_pass = update_data.pop("password")
+        if new_pass:
+            hashed = bcrypt.hashpw(new_pass.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            user_q = select(User).where(User.id == member.user_id)
+            user = (await session.execute(user_q)).scalar_one()
+            user.hashed_password = hashed
+
     # Update member fields
     for field, value in update_data.items():
         setattr(member, field, value)
@@ -133,3 +141,39 @@ async def update_member(
     await session.flush()
     await session.refresh(member, ["user"])
     return member
+
+from app.models.subscription import Subscription
+from app.models.reservation import Reservation
+from app.models.trainer_session import TrainerSession
+
+async def delete_member(session: AsyncSession, member_id: int) -> None:
+    member = await get_member_by_id(session, member_id)
+
+    # 1. Delete Trainer Sessions
+    await session.execute(
+        select(TrainerSession).where(TrainerSession.member_id == member.id)
+    )
+    ts_result = await session.execute(select(TrainerSession).where(TrainerSession.member_id == member.id))
+    for ts in ts_result.scalars().all():
+        await session.delete(ts)
+
+    # 2. Delete Reservations
+    res_result = await session.execute(select(Reservation).where(Reservation.member_id == member.id))
+    for r in res_result.scalars().all():
+        await session.delete(r)
+
+    # 3. Delete Subscriptions
+    sub_result = await session.execute(select(Subscription).where(Subscription.member_id == member.id))
+    for s in sub_result.scalars().all():
+        await session.delete(s)
+
+    user_id = member.user_id
+    await session.delete(member)
+
+    if user_id:
+        user_result = await session.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        if user:
+            await session.delete(user)
+
+    await session.commit()
